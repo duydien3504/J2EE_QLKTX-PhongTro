@@ -43,6 +43,18 @@ public class Contract {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "liquidation_date")
+    private LocalDate liquidationDate;
+
+    @Column(name = "deduction_amount", precision = 10, scale = 2)
+    private BigDecimal deductionAmount;
+
+    @Column(name = "refund_amount", precision = 10, scale = 2)
+    private BigDecimal refundAmount;
+
+    @Column(name = "deduction_reason")
+    private String deductionReason;
+
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {
