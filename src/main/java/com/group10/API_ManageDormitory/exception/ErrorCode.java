@@ -19,7 +19,13 @@ public enum ErrorCode {
     EMAIL_EXISTED(1009, "Email already exists", HttpStatus.BAD_REQUEST),
     ROLE_NOT_FOUND(1010, "Role not found", HttpStatus.NOT_FOUND),
     PASSWORD_INCORRECT(1011, "Password incorrect", HttpStatus.BAD_REQUEST),
-    TOKEN_INVALID(1012, "Token invalid or expired", HttpStatus.UNAUTHORIZED);
+    TOKEN_INVALID(1012, "Token invalid or expired", HttpStatus.UNAUTHORIZED),
+    CONTRACT_NOT_FOUND(1013, "Contract not found", HttpStatus.NOT_FOUND),
+    ROOM_NOT_FOUND(1014, "Room not found", HttpStatus.NOT_FOUND),
+    TENANT_NOT_FOUND(1015, "Tenant not found", HttpStatus.NOT_FOUND),
+    ROOM_NOT_AVAILABLE(1016, "Room is not available", HttpStatus.BAD_REQUEST),
+    OCCUPANCY_LIMIT_REACHED(1017, "Room occupancy limit reached", HttpStatus.BAD_REQUEST),
+    TENANT_ALREADY_IN_CONTRACT(1018, "Tenant already in contract", HttpStatus.BAD_REQUEST);
 
     private final int code;
     private final String message;
