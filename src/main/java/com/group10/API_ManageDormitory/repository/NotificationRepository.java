@@ -1,10 +1,9 @@
 package com.group10.API_ManageDormitory.repository;
 
-import com.group10.API_ManageDormitory.entity.Room;
+import com.group10.API_ManageDormitory.entity.Notification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface RoomRepository extends JpaRepository<Room, Integer> {
-    long countByCurrentStatus(String currentStatus);
+public interface NotificationRepository extends JpaRepository<Notification, Integer> {
 }

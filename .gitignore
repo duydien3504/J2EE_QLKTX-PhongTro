@@ -38,5 +38,5 @@ TASK.md
 
 src/main/java/com/group10/API_ManageDormitory/config/cert
 
-src/main/resources/application.yml
-src/test/resources/application.yml
+src/main/resources/
+src/test/resources/

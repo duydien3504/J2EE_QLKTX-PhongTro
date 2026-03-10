@@ -1,4 +1,4 @@
-package com.group10.API_ManageDormitory.config;
+package com.group10.API_ManageDormitory.config.key;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;

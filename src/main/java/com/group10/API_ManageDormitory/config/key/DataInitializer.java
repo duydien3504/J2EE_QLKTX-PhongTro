@@ -1,4 +1,4 @@
-package com.group10.API_ManageDormitory.config;
+package com.group10.API_ManageDormitory.config.key;
 
 import com.group10.API_ManageDormitory.entity.Role;
 import com.group10.API_ManageDormitory.entity.User;

@@ -1,4 +1,4 @@
-package com.group10.API_ManageDormitory.config;
+package com.group10.API_ManageDormitory.config.key;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
