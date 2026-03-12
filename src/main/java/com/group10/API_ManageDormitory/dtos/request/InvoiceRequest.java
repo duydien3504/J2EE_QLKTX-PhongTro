@@ -7,24 +7,32 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class InvoiceRequest {
 
-        @NotNull(message = "Room ID không được để trống")
-        private Long roomId;
+        @NotNull(message = "Contract ID không được để trống")
+        private Integer contractId;
 
-        @Positive(message = "Electricity fee phải > 0")
-        private Double electricityFee ;
+        @NotNull(message = "Month không được để trống")
+        private Integer month;
 
-        @Positive(message = "Water fee phải > 0")
-        private Double waterFee;
+        @NotNull(message = "Year không được để trống")
+        private Integer year;
 
-        @Positive(message = "Service fee phải > 0")
-        private Double serviceFee;
+        private LocalDate createdDate;
 
+        private LocalDate dueDate;
 
+        @Positive(message = "Total amount phải > 0")
+        private BigDecimal totalAmount;
+
+        private String paymentStatus;
+
+        private String notes;
 }
-

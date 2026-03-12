@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
 @Table(name = "Invoices")
@@ -12,6 +13,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Builder
 public class Invoice {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "invoice_id")
@@ -19,12 +21,13 @@ public class Invoice {
 
     @ManyToOne
     @JoinColumn(name = "contract_id", nullable = false)
+    @JsonIgnoreProperties({"invoices"})
     private Contract contract;
 
-    @Column(name = "month")
+    @Column(name = "month", nullable = false)
     private Integer month;
 
-    @Column(name = "year")
+    @Column(name = "year", nullable = false)
     private Integer year;
 
     @Column(name = "created_date")

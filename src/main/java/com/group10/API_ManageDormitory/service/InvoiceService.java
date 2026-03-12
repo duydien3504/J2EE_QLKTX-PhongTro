@@ -16,30 +16,31 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final ContractRepository contractRepository;
 
-
     public List<Invoice> getAllInvoices() {
         return invoiceRepository.findAll();
     }
-
 
     public Invoice getInvoiceById(Integer id) {
         return invoiceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Invoice not found"));
     }
 
-
     public Invoice createInvoice(Invoice invoice) {
 
-        Integer contractId = invoice.getContract().getContractId();
+        // kiểm tra contract có tồn tại trong request không
+        if (invoice.getContract() == null || invoice.getContract().getContractId() == null) {
+            throw new RuntimeException("Contract ID is required");
+        }
 
-        Contract contract = contractRepository.findById(contractId)
+        // tìm contract trong database
+        Contract contract = contractRepository.findById(invoice.getContract().getContractId())
                 .orElseThrow(() -> new RuntimeException("Contract not found"));
 
+        // gán contract chuẩn từ database
         invoice.setContract(contract);
 
         return invoiceRepository.save(invoice);
     }
-
 
     public Invoice updateInvoice(Integer id, Invoice invoice) {
 
@@ -55,7 +56,6 @@ public class InvoiceService {
 
         return invoiceRepository.save(existing);
     }
-
 
     public void deleteInvoice(Integer id) {
         invoiceRepository.deleteById(id);
