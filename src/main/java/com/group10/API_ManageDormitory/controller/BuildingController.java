@@ -28,7 +28,7 @@ public class BuildingController {
     }
 
     @PostMapping("/buildings")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<BuildingResponse> createBuilding(@RequestBody @Valid BuildingRequest request) {
         return ApiResponse.<BuildingResponse>builder()
                 .result(buildingService.createBuilding(request))
@@ -36,7 +36,7 @@ public class BuildingController {
     }
 
     @PutMapping("/buildings/{id}")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<BuildingResponse> updateBuilding(@PathVariable Integer id,
             @RequestBody BuildingRequest request) {
         return ApiResponse.<BuildingResponse>builder()
@@ -45,7 +45,7 @@ public class BuildingController {
     }
 
     @DeleteMapping("/buildings/{id}")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<String> deleteBuilding(@PathVariable Integer id) {
         buildingService.deleteBuilding(id);
         return ApiResponse.<String>builder()
@@ -62,7 +62,7 @@ public class BuildingController {
     }
 
     @PostMapping("/floors")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<FloorResponse> createFloor(@RequestBody @Valid FloorRequest request) {
         return ApiResponse.<FloorResponse>builder()
                 .result(buildingService.createFloor(request))

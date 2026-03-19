@@ -30,7 +30,7 @@ public class RoomController {
     }
 
     @PostMapping("/room-types")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<RoomTypeResponse> createRoomType(@RequestBody @Valid RoomTypeRequest request) {
         return ApiResponse.<RoomTypeResponse>builder()
                 .result(roomService.createRoomType(request))
@@ -57,7 +57,7 @@ public class RoomController {
     }
 
     @PostMapping("/rooms")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<RoomResponse> createRoom(@RequestBody @Valid RoomRequest request) {
         return ApiResponse.<RoomResponse>builder()
                 .result(roomService.createRoom(request))
@@ -65,7 +65,7 @@ public class RoomController {
     }
 
     @PutMapping("/rooms/{id}")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<RoomResponse> updateRoom(@PathVariable Integer id, @RequestBody RoomRequest request) {
         return ApiResponse.<RoomResponse>builder()
                 .result(roomService.updateRoom(id, request))
@@ -73,7 +73,7 @@ public class RoomController {
     }
 
     @PatchMapping("/rooms/{id}/status")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<RoomResponse> updateRoomStatus(@PathVariable Integer id,
             @RequestBody Map<String, String> statusMap) {
         // Expecting {"status": "NEW_STATUS"}
