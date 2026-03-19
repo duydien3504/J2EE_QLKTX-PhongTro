@@ -16,4 +16,6 @@ public interface TenantRepository extends JpaRepository<Tenant, Integer> {
             "t.phoneNumber LIKE %:keyword% OR " +
             "t.identityCardNumber LIKE %:keyword%)")
     List<Tenant> searchTenants(@org.springframework.data.repository.query.Param("keyword") String keyword);
+
+    java.util.Optional<Tenant> findByUser_UserId(Integer userId);
 }

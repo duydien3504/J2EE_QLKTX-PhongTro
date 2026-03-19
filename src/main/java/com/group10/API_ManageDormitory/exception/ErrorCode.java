@@ -25,7 +25,8 @@ public enum ErrorCode {
     TENANT_NOT_FOUND(1015, "Tenant not found", HttpStatus.NOT_FOUND),
     ROOM_NOT_AVAILABLE(1016, "Room is not available", HttpStatus.BAD_REQUEST),
     OCCUPANCY_LIMIT_REACHED(1017, "Room occupancy limit reached", HttpStatus.BAD_REQUEST),
-    TENANT_ALREADY_IN_CONTRACT(1018, "Tenant already in contract", HttpStatus.BAD_REQUEST);
+    TENANT_ALREADY_IN_CONTRACT(1018, "Tenant already in contract", HttpStatus.BAD_REQUEST),
+    RESOURCE_NOT_FOUND(1019, "Resource not found", HttpStatus.NOT_FOUND);
 
     private final int code;
     private final String message;
