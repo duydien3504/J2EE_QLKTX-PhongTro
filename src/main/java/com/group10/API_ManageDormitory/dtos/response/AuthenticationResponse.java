@@ -9,4 +9,5 @@ import lombok.*;
 public class AuthenticationResponse {
     private String token;
     private boolean authenticated;
+    private String role;
 }

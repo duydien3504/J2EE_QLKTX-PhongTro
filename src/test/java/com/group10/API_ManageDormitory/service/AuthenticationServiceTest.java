@@ -5,10 +5,12 @@ import com.group10.API_ManageDormitory.dtos.request.RegisterRequest;
 import com.group10.API_ManageDormitory.dtos.response.AuthenticationResponse;
 import com.group10.API_ManageDormitory.dtos.response.UserResponse;
 import com.group10.API_ManageDormitory.entity.User;
+import com.group10.API_ManageDormitory.entity.Role;
 import com.group10.API_ManageDormitory.exception.AppException;
 import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.mapper.UserMapper;
 import com.group10.API_ManageDormitory.repository.UserRepository;
+import com.group10.API_ManageDormitory.repository.RoleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +31,9 @@ class AuthenticationServiceTest {
 
         @Mock
         private UserRepository userRepository;
+
+        @Mock
+        private RoleRepository roleRepository;
 
         @Mock
         private UserMapper userMapper;
@@ -67,6 +72,7 @@ class AuthenticationServiceTest {
                 when(userRepository.findByUsername(any())).thenReturn(Optional.empty());
                 when(userMapper.toUser(any())).thenReturn(user);
                 when(passwordEncoder.encode(any())).thenReturn("encoded_password");
+                when(roleRepository.findByRoleName("Tenant")).thenReturn(Optional.of(Role.builder().roleName("Tenant").build()));
                 when(userRepository.save(any())).thenReturn(user);
                 when(userMapper.toUserResponse(any())).thenReturn(userResponse);
 
@@ -106,6 +112,7 @@ class AuthenticationServiceTest {
                                 .username("testuser")
                                 .passwordHash("encoded_password")
                                 .userId(1)
+                                .role(Role.builder().roleName("Admin").build())
                                 .build();
 
                 when(userRepository.findByUsername(any())).thenReturn(Optional.of(user));
@@ -118,6 +125,7 @@ class AuthenticationServiceTest {
                 assertNotNull(result);
                 assertTrue(result.isAuthenticated());
                 assertNotNull(result.getToken());
+                assertEquals("Admin", result.getRole());
         }
 
         @Test
