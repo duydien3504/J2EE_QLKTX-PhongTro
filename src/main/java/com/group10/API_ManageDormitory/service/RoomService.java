@@ -55,7 +55,8 @@ public class RoomService {
     // Room Operations
     public List<RoomResponse> getRooms(Integer floorId, String status, BigDecimal minPrice, BigDecimal maxPrice) {
         String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN");
+        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN")
+                || com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
 
         List<Room> rooms;
         if (isAdmin || username == null) {
@@ -67,7 +68,7 @@ public class RoomService {
         // Manual Filtering
         return rooms.stream()
                 .filter(room -> floorId == null || room.getFloor().getFloorId().equals(floorId))
-                .filter(room -> status == null
+                .filter(room -> status == null || status.trim().isEmpty()
                         || (room.getCurrentStatus() != null && room.getCurrentStatus().equalsIgnoreCase(status)))
                 .filter(room -> minPrice == null || room.getRoomType().getBasePrice().compareTo(minPrice) >= 0)
                 .filter(room -> maxPrice == null || room.getRoomType().getBasePrice().compareTo(maxPrice) <= 0)
