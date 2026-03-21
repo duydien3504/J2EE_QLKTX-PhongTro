@@ -26,7 +26,13 @@ public enum ErrorCode {
     ROOM_NOT_AVAILABLE(1016, "Room is not available", HttpStatus.BAD_REQUEST),
     OCCUPANCY_LIMIT_REACHED(1017, "Room occupancy limit reached", HttpStatus.BAD_REQUEST),
     TENANT_ALREADY_IN_CONTRACT(1018, "Tenant already in contract", HttpStatus.BAD_REQUEST),
-    RESOURCE_NOT_FOUND(1019, "Resource not found", HttpStatus.NOT_FOUND);
+    RESOURCE_NOT_FOUND(1019, "Resource not found", HttpStatus.NOT_FOUND),
+    ASSET_NOT_FOUND(1020, "Asset not found", HttpStatus.NOT_FOUND),
+    ASSET_IN_USE(1021, "Cannot delete asset that is currently assigned to rooms", HttpStatus.BAD_REQUEST),
+    ROOM_IMAGE_LIMIT_EXCEEDED(1022, "Room cannot have more than 10 images", HttpStatus.BAD_REQUEST),
+    INVALID_IMAGE_FORMAT(1023, "Only JPG, JPEG, and PNG image formats are allowed", HttpStatus.BAD_REQUEST),
+    CLOUDINARY_UPLOAD_FAILED(1024, "Image upload failed. Please check Cloudinary configuration or try again", HttpStatus.INTERNAL_SERVER_ERROR),
+    ACCESS_DENIED_TO_RESOURCE(1025, "You do not have permission to access or modify this resource", HttpStatus.FORBIDDEN);
 
     private final int code;
     private final String message;

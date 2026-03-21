@@ -3,6 +3,9 @@ package com.group10.API_ManageDormitory.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "Rooms")
 @Data
@@ -28,4 +31,9 @@ public class Room {
 
     @Column(name = "current_status")
     private String currentStatus;
+
+    @OneToMany(mappedBy = "room", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<RoomImage> images = new ArrayList<>();
 }
+
