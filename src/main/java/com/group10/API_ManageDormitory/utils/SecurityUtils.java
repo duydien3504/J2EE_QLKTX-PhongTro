@@ -28,6 +28,6 @@ public class SecurityUtils {
         }
         
         return authentication.getAuthorities().stream()
-                .anyMatch(r -> r.getAuthority().equals(roleName));
+                .anyMatch(r -> r.getAuthority().equalsIgnoreCase(roleName));
     }
 }
