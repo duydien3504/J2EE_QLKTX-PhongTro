@@ -23,4 +23,7 @@ public class Service {
 
     @Column(name = "calculation_method")
     private String calculationMethod;
+
+    @Column(name = "icon")
+    private String icon;
 }
