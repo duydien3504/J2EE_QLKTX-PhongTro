@@ -18,4 +18,6 @@ public class ServiceInfoRequest {
     private String unit;
 
     private String calculationMethod;
+
+    private String icon;
 }

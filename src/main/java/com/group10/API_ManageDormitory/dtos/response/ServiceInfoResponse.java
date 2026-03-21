@@ -14,4 +14,5 @@ public class ServiceInfoResponse {
     private String serviceName;
     private String unit;
     private String calculationMethod;
+    private String icon;
 }
