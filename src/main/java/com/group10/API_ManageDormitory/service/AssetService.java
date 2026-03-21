@@ -43,6 +43,22 @@ public class AssetService {
         return toAssetResponse(assetRepository.save(asset));
     }
 
+    /**
+     * Xóa tài sản khỏi danh mục.
+     * Guard: Nếu tài sản đang được gán cho bất kỳ phòng nào (RoomAssets),
+     *        ném ASSET_IN_USE để bảo vệ toàn vẹn dữ liệu.
+     * Complexity: O(1) - existsById + existsByAsset_AssetId đều dùng DB-level index.
+     */
+    public void deleteAsset(Integer assetId) {
+        if (!assetRepository.existsById(assetId)) {
+            throw new AppException(ErrorCode.ASSET_NOT_FOUND);
+        }
+        if (roomAssetRepository.existsByAsset_AssetId(assetId)) {
+            throw new AppException(ErrorCode.ASSET_IN_USE);
+        }
+        assetRepository.deleteById(assetId);
+    }
+
     // Room Assets
     public List<RoomAssetResponse> getAssetsByRoom(Integer roomId) {
         if (!roomRepository.existsById(roomId)) {
@@ -58,7 +74,7 @@ public class AssetService {
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
 
         Asset asset = assetRepository.findById(request.getAssetId())
-                .orElseThrow(() -> new RuntimeException("Asset not found")); // Could add specific code
+                .orElseThrow(() -> new AppException(ErrorCode.ASSET_NOT_FOUND));
 
         RoomAsset roomAsset = RoomAsset.builder()
                 .room(room)
@@ -72,7 +88,7 @@ public class AssetService {
 
     public RoomAssetResponse updateRoomAsset(Integer id, RoomAssetRequest request) {
         RoomAsset roomAsset = roomAssetRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Room Asset not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
 
         if (request.getQuantity() != null)
             roomAsset.setQuantity(request.getQuantity());
@@ -84,7 +100,7 @@ public class AssetService {
 
     public void removeRoomAsset(Integer id) {
         RoomAsset roomAsset = roomAssetRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Room Asset not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
         roomAssetRepository.delete(roomAsset);
     }
 
@@ -111,3 +127,4 @@ public class AssetService {
                 .build();
     }
 }
+

@@ -8,9 +8,12 @@ import com.group10.API_ManageDormitory.dtos.response.RoomTypeResponse;
 import com.group10.API_ManageDormitory.service.RoomService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -85,4 +88,15 @@ public class RoomController {
                 .result(roomService.updateRoomStatus(id, status))
                 .build();
     }
+
+    @PostMapping(value = "/rooms/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
+    public ApiResponse<RoomResponse> uploadRoomImages(
+            @PathVariable Integer id,
+            @RequestParam("images") List<MultipartFile> images) throws IOException {
+        return ApiResponse.<RoomResponse>builder()
+                .result(roomService.uploadRoomImages(id, images))
+                .build();
+    }
 }
+

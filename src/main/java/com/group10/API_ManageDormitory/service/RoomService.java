@@ -1,21 +1,27 @@
 package com.group10.API_ManageDormitory.service;
 
+import com.group10.API_ManageDormitory.constant.RoomImageConstant;
 import com.group10.API_ManageDormitory.dtos.request.RoomRequest;
 import com.group10.API_ManageDormitory.dtos.request.RoomTypeRequest;
 import com.group10.API_ManageDormitory.dtos.response.RoomResponse;
 import com.group10.API_ManageDormitory.dtos.response.RoomTypeResponse;
 import com.group10.API_ManageDormitory.entity.Floor;
 import com.group10.API_ManageDormitory.entity.Room;
+import com.group10.API_ManageDormitory.entity.RoomImage;
 import com.group10.API_ManageDormitory.entity.RoomType;
 import com.group10.API_ManageDormitory.exception.AppException;
 import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.repository.FloorRepository;
+import com.group10.API_ManageDormitory.repository.RoomImageRepository;
 import com.group10.API_ManageDormitory.repository.RoomRepository;
 import com.group10.API_ManageDormitory.repository.RoomTypeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -25,6 +31,8 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final RoomTypeRepository roomTypeRepository;
     private final FloorRepository floorRepository;
+    private final RoomImageRepository roomImageRepository;
+    private final CloudinaryService cloudinaryService;
 
     // RoomType Operations
     public List<RoomTypeResponse> getAllRoomTypes() {
@@ -46,7 +54,15 @@ public class RoomService {
 
     // Room Operations
     public List<RoomResponse> getRooms(Integer floorId, String status, BigDecimal minPrice, BigDecimal maxPrice) {
-        List<Room> rooms = roomRepository.findAll();
+        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
+        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN");
+
+        List<Room> rooms;
+        if (isAdmin || username == null) {
+            rooms = roomRepository.findAll();
+        } else {
+            rooms = roomRepository.findAllByFloor_Building_Manager_Username(username);
+        }
 
         // Manual Filtering
         return rooms.stream()
@@ -61,26 +77,26 @@ public class RoomService {
 
     public RoomResponse getRoomDetail(Integer id) {
         Room room = roomRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Room not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        checkRoomOwnership(room);
         return toRoomResponse(room);
     }
 
     public RoomResponse createRoom(RoomRequest request) {
         Floor floor = floorRepository.findById(request.getFloorId())
-                .orElseThrow(() -> new RuntimeException("Floor not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+        checkFloorOwnership(floor);
 
         RoomType roomType = roomTypeRepository.findById(request.getRoomTypeId())
-                .orElseThrow(() -> new RuntimeException("RoomType not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
 
-        if (request.getCurrentStatus() == null) {
-            request.setCurrentStatus("AVAILABLE");
-        }
+        String status = request.getCurrentStatus() != null ? request.getCurrentStatus() : "AVAILABLE";
 
         Room room = Room.builder()
                 .roomNumber(request.getRoomNumber())
                 .floor(floor)
                 .roomType(roomType)
-                .currentStatus(request.getCurrentStatus())
+                .currentStatus(status)
                 .build();
 
         return toRoomResponse(roomRepository.save(room));
@@ -88,7 +104,8 @@ public class RoomService {
 
     public RoomResponse updateRoom(Integer id, RoomRequest request) {
         Room room = roomRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Room not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        checkRoomOwnership(room);
 
         if (request.getRoomNumber() != null)
             room.setRoomNumber(request.getRoomNumber());
@@ -97,13 +114,14 @@ public class RoomService {
 
         if (request.getFloorId() != null) {
             Floor floor = floorRepository.findById(request.getFloorId())
-                    .orElseThrow(() -> new RuntimeException("Floor not found"));
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+            checkFloorOwnership(floor); // ensure the new floor is also owned by the user
             room.setFloor(floor);
         }
 
         if (request.getRoomTypeId() != null) {
             RoomType roomType = roomTypeRepository.findById(request.getRoomTypeId())
-                    .orElseThrow(() -> new RuntimeException("RoomType not found"));
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
             room.setRoomType(roomType);
         }
 
@@ -112,9 +130,83 @@ public class RoomService {
 
     public RoomResponse updateRoomStatus(Integer id, String status) {
         Room room = roomRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Room not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        checkRoomOwnership(room);
         room.setCurrentStatus(status);
         return toRoomResponse(roomRepository.save(room));
+    }
+
+    /**
+     * Upload tối đa 10 ảnh cho phòng.
+     * Validate:
+     *   - Tổng ảnh hiện tại + ảnh mới <= MAX_IMAGES_PER_ROOM (10)  → O(1) COUNT query
+     *   - Định dạng: chỉ chấp nhận image/jpeg, image/jpg, image/png   → O(n) - n là số ảnh upload
+     *   - Dung lượng: mỗi file <= 5MB                                  → O(n)
+     * Upload song song từng ảnh lên Cloudinary, lưu URL vào RoomImages.
+     */
+    public RoomResponse uploadRoomImages(Integer roomId, List<MultipartFile> images) throws IOException {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        checkRoomOwnership(room);
+
+        long currentImageCount = roomImageRepository.countByRoom_RoomId(roomId);
+        if (currentImageCount + images.size() > RoomImageConstant.MAX_IMAGES_PER_ROOM) {
+            throw new AppException(ErrorCode.ROOM_IMAGE_LIMIT_EXCEEDED);
+        }
+
+        for (MultipartFile file : images) {
+            String contentType = file.getContentType();
+            if (contentType == null || !RoomImageConstant.ALLOWED_CONTENT_TYPES.contains(contentType)) {
+                throw new AppException(ErrorCode.INVALID_IMAGE_FORMAT);
+            }
+        }
+
+        List<RoomImage> newImages = new ArrayList<>();
+        boolean isFirstUpload = currentImageCount == 0;
+
+        for (int i = 0; i < images.size(); i++) {
+            String imageUrl;
+            try {
+                imageUrl = cloudinaryService.uploadImage(images.get(i));
+            } catch (IOException | RuntimeException ex) {
+                // Bọc lỗi Cloudinary (cả RuntimeException từ SDK khi cloud_name sai)
+                // thành AppException có mã lỗi rõ ràng thay vì code 9999
+                throw new AppException(ErrorCode.CLOUDINARY_UPLOAD_FAILED);
+            }
+            RoomImage roomImage = RoomImage.builder()
+                    .room(room)
+                    .imageUrl(imageUrl)
+                    .isPrimary(isFirstUpload && i == 0) // first image of first upload becomes primary
+                    .build();
+            newImages.add(roomImage);
+        }
+
+        roomImageRepository.saveAll(newImages);
+        return toRoomResponse(roomRepository.findById(roomId).orElseThrow());
+    }
+
+    private void checkRoomOwnership(Room room) {
+        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
+        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN");
+        if (isAdmin || username == null) return;
+
+        if (room.getFloor() != null && room.getFloor().getBuilding() != null && room.getFloor().getBuilding().getManager() != null) {
+            if (!room.getFloor().getBuilding().getManager().getUsername().equals(username)) {
+                throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+            }
+        }
+    }
+
+    private void checkFloorOwnership(Floor floor) {
+        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
+        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN");
+        if (isAdmin || username == null) return;
+
+        if (floor.getBuilding() != null && floor.getBuilding().getManager() != null) {
+            if (!floor.getBuilding().getManager().getUsername().equals(username)) {
+                throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+            }
+        }
     }
 
     // Mappers
@@ -130,6 +222,11 @@ public class RoomService {
     }
 
     private RoomResponse toRoomResponse(Room room) {
+        List<String> imageUrls = roomImageRepository.findByRoom_RoomId(room.getRoomId())
+                .stream()
+                .map(RoomImage::getImageUrl)
+                .collect(Collectors.toList());
+
         return RoomResponse.builder()
                 .roomId(room.getRoomId())
                 .roomNumber(room.getRoomNumber())
@@ -140,6 +237,8 @@ public class RoomService {
                 .roomTypeName(room.getRoomType().getTypeName())
                 .price(room.getRoomType().getBasePrice())
                 .currentStatus(room.getCurrentStatus())
+                .imageUrls(imageUrls)
                 .build();
     }
 }
+
