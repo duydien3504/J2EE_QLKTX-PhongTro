@@ -40,3 +40,8 @@ src/main/java/com/group10/API_ManageDormitory/config/cert
 
 src/main/resources/application.yml
 src/test/resources/application.yml
+
+compile_log.txt
+test_log.txt
+test_log2.txt
+

@@ -21,17 +21,13 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        if (roleRepository.count() == 0) {
-            roleRepository.save(Role.builder().roleName("ADMIN").description("Administrator").build());
-            roleRepository.save(Role.builder().roleName("OWNER").description("Building Owner").build());
-            roleRepository.save(Role.builder().roleName("STAFF").description("Staff").build());
-            roleRepository.save(Role.builder().roleName("TENANT").description("Tenant").build());
-            log.info("Roles initialized: ADMIN, OWNER, STAFF, TENANT");
-        }
+        ensureRoleExists("Admin", "Administrator");
+        ensureRoleExists("Owner", "Building Owner");
+        ensureRoleExists("Staff", "Staff");
+        ensureRoleExists("Tenant", "Tenant");
 
         if (userRepository.findByUsername("admin").isEmpty()) {
-            Role adminRole = roleRepository.findByRoleName("ADMIN").orElse(null);
-            if (adminRole != null) {
+            roleRepository.findByRoleName("Admin").ifPresent(adminRole -> {
                 User admin = User.builder()
                         .username("admin")
                         .passwordHash(passwordEncoder.encode("admin"))
@@ -41,7 +37,17 @@ public class DataInitializer implements CommandLineRunner {
                         .build();
                 userRepository.save(admin);
                 log.info("Admin user initialized: username=admin, password=admin");
-            }
+            });
+        }
+    }
+
+    private void ensureRoleExists(String roleName, String description) {
+        if (roleRepository.findByRoleName(roleName).isEmpty()) {
+            roleRepository.save(Role.builder()
+                    .roleName(roleName)
+                    .description(description)
+                    .build());
+            log.info("Role initialized: {}", roleName);
         }
     }
 }
