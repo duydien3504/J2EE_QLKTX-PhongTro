@@ -9,4 +9,8 @@ import java.util.List;
 @Repository
 public interface RoomAssetRepository extends JpaRepository<RoomAsset, Integer> {
     List<RoomAsset> findByRoom_RoomId(Integer roomId);
+
+    // O(1) - DB-level EXISTS check, no full table scan
+    boolean existsByAsset_AssetId(Integer assetId);
 }
+

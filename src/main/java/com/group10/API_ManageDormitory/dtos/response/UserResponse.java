@@ -15,5 +15,6 @@ public class UserResponse {
     private String phoneNumber;
     private Boolean isActive;
     private LocalDateTime createdAt;
+    private String roleName;
     // Hide password and strict role handling
 }

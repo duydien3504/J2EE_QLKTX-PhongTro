@@ -10,6 +10,13 @@ import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.repository.MeterReadingRepository;
 import com.group10.API_ManageDormitory.repository.RoomRepository;
 import com.group10.API_ManageDormitory.repository.ServiceRepository;
+import com.group10.API_ManageDormitory.repository.UserRepository;
+import com.group10.API_ManageDormitory.repository.TenantRepository;
+import com.group10.API_ManageDormitory.repository.ContractTenantRepository;
+import com.group10.API_ManageDormitory.entity.User;
+import com.group10.API_ManageDormitory.entity.Tenant;
+import com.group10.API_ManageDormitory.entity.ContractTenant;
+import org.springframework.security.core.context.SecurityContextHolder;
 import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
@@ -23,8 +30,37 @@ public class MeterReadingService {
     private final MeterReadingRepository meterReadingRepository;
     private final RoomRepository roomRepository;
     private final ServiceRepository serviceRepository;
+    private final UserRepository userRepository;
+    private final TenantRepository tenantRepository;
+    private final ContractTenantRepository contractTenantRepository;
+
+    private void checkDataOwnership(Integer roomId) {
+        var context = SecurityContextHolder.getContext();
+        if (context == null || context.getAuthentication() == null) return;
+        
+        String username = context.getAuthentication().getName();
+        User user = userRepository.findByUsername(username).orElse(null);
+        
+        if (user != null && user.getRole() != null && "TENANT".equals(user.getRole().getRoleName())) {
+            Tenant tenant = tenantRepository.findByUser_UserId(user.getUserId()).orElse(null);
+            if (tenant != null) {
+                ContractTenant contractTenant = contractTenantRepository.findByTenant_TenantId(tenant.getTenantId()).orElse(null);
+                if (contractTenant != null) {
+                    Integer tenantRoomId = contractTenant.getContract().getRoom().getRoomId();
+                    if (roomId != null && !roomId.equals(tenantRoomId)) {
+                        throw new AppException(ErrorCode.UNAUTHORIZED);
+                    }
+                } else {
+                     throw new AppException(ErrorCode.UNAUTHORIZED);
+                }
+            } else {
+                throw new AppException(ErrorCode.UNAUTHORIZED);
+            }
+        }
+    }
 
     public List<MeterReadingResponse> getReadings(Integer roomId, Integer month, Integer year) {
+        checkDataOwnership(roomId);
         if (roomId != null) {
             if (month != null && year != null) {
                 LocalDate start = LocalDate.of(year, month, 1);
@@ -46,6 +82,7 @@ public class MeterReadingService {
     }
 
     public MeterReadingResponse getLastMonthReading(Integer roomId, Integer serviceId) {
+        checkDataOwnership(roomId);
         MeterReading reading = meterReadingRepository
                 .findFirstByRoom_RoomIdAndService_ServiceIdOrderByReadingDateDesc(roomId, serviceId)
                 .orElse(null);

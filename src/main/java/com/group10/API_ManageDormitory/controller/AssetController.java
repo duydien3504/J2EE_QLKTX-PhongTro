@@ -36,6 +36,15 @@ public class AssetController {
                 .build();
     }
 
+    @DeleteMapping("/assets/{id}")
+    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    public ApiResponse<String> deleteAsset(@PathVariable Integer id) {
+        assetService.deleteAsset(id);
+        return ApiResponse.<String>builder()
+                .result("Asset deleted successfully")
+                .build();
+    }
+
     // Room Assets
     @GetMapping("/rooms/{id}/assets")
     public ApiResponse<List<RoomAssetResponse>> getAssetsByRoom(@PathVariable Integer id) {

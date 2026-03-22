@@ -8,10 +8,12 @@ import com.group10.API_ManageDormitory.dtos.request.RegisterRequest;
 import com.group10.API_ManageDormitory.dtos.response.AuthenticationResponse;
 import com.group10.API_ManageDormitory.dtos.response.UserResponse;
 import com.group10.API_ManageDormitory.entity.User;
+import com.group10.API_ManageDormitory.entity.Role;
 import com.group10.API_ManageDormitory.exception.AppException;
 import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.mapper.UserMapper;
 import com.group10.API_ManageDormitory.repository.UserRepository;
+import com.group10.API_ManageDormitory.repository.RoleRepository;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jwt.JWTClaimsSet;
@@ -29,6 +31,7 @@ import java.util.Date;
 @RequiredArgsConstructor
 public class AuthenticationService {
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
 
@@ -44,6 +47,10 @@ public class AuthenticationService {
 
         User user = userMapper.toUser(request);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+
+        Role role = roleRepository.findByRoleName("Tenant")
+                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
+        user.setRole(role);
 
         return userMapper.toUserResponse(userRepository.save(user));
     }
@@ -63,6 +70,7 @@ public class AuthenticationService {
         return AuthenticationResponse.builder()
                 .token(token)
                 .authenticated(true)
+                .role(user.getRole() != null ? user.getRole().getRoleName() : null)
                 .build();
     }
 
@@ -134,6 +142,6 @@ public class AuthenticationService {
     private String buildScope(User user) {
         if (user.getRole() == null)
             return "";
-        return user.getRole().getRoleName();
+        return user.getRole().getRoleName().toUpperCase();
     }
 }

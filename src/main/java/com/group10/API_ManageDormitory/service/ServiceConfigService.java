@@ -38,6 +38,7 @@ public class ServiceConfigService {
                 .serviceName(request.getServiceName())
                 .unit(request.getUnit())
                 .calculationMethod(request.getCalculationMethod())
+                .icon(request.getIcon())
                 .build();
         return toServiceInfoResponse(serviceRepository.save(service));
     }
@@ -52,6 +53,8 @@ public class ServiceConfigService {
             service.setUnit(request.getUnit());
         if (request.getCalculationMethod() != null)
             service.setCalculationMethod(request.getCalculationMethod());
+        if (request.getIcon() != null)
+            service.setIcon(request.getIcon());
 
         return toServiceInfoResponse(serviceRepository.save(service));
     }
@@ -99,6 +102,7 @@ public class ServiceConfigService {
                 .serviceName(service.getServiceName())
                 .unit(service.getUnit())
                 .calculationMethod(service.getCalculationMethod())
+                .icon(service.getIcon())
                 .build();
     }
 

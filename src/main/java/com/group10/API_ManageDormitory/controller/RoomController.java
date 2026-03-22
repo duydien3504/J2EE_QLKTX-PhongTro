@@ -8,9 +8,12 @@ import com.group10.API_ManageDormitory.dtos.response.RoomTypeResponse;
 import com.group10.API_ManageDormitory.service.RoomService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +33,7 @@ public class RoomController {
     }
 
     @PostMapping("/room-types")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<RoomTypeResponse> createRoomType(@RequestBody @Valid RoomTypeRequest request) {
         return ApiResponse.<RoomTypeResponse>builder()
                 .result(roomService.createRoomType(request))
@@ -57,7 +60,7 @@ public class RoomController {
     }
 
     @PostMapping("/rooms")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<RoomResponse> createRoom(@RequestBody @Valid RoomRequest request) {
         return ApiResponse.<RoomResponse>builder()
                 .result(roomService.createRoom(request))
@@ -65,7 +68,7 @@ public class RoomController {
     }
 
     @PutMapping("/rooms/{id}")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<RoomResponse> updateRoom(@PathVariable Integer id, @RequestBody RoomRequest request) {
         return ApiResponse.<RoomResponse>builder()
                 .result(roomService.updateRoom(id, request))
@@ -73,7 +76,7 @@ public class RoomController {
     }
 
     @PatchMapping("/rooms/{id}/status")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<RoomResponse> updateRoomStatus(@PathVariable Integer id,
             @RequestBody Map<String, String> statusMap) {
         // Expecting {"status": "NEW_STATUS"}
@@ -85,4 +88,15 @@ public class RoomController {
                 .result(roomService.updateRoomStatus(id, status))
                 .build();
     }
+
+    @PostMapping(value = "/rooms/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
+    public ApiResponse<RoomResponse> uploadRoomImages(
+            @PathVariable Integer id,
+            @RequestParam("images") List<MultipartFile> images) throws IOException {
+        return ApiResponse.<RoomResponse>builder()
+                .result(roomService.uploadRoomImages(id, images))
+                .build();
+    }
 }
+

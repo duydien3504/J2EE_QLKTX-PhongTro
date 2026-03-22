@@ -45,6 +45,7 @@ public class UserMapper {
                 .phoneNumber(user.getPhoneNumber())
                 .isActive(user.getIsActive())
                 .createdAt(user.getCreatedAt())
+                .roleName(user.getRole() != null ? user.getRole().getRoleName() : null)
                 .build();
     }
 }
