@@ -6,11 +6,13 @@ import com.group10.API_ManageDormitory.repository.InvoiceRepository;
 import com.group10.API_ManageDormitory.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class StatisticsService {
     private final InvoiceRepository invoiceRepository;
     private final RoomRepository roomRepository;
