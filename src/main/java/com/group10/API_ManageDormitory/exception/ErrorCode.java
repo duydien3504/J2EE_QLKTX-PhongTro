@@ -32,7 +32,8 @@ public enum ErrorCode {
     ROOM_IMAGE_LIMIT_EXCEEDED(1022, "Room cannot have more than 10 images", HttpStatus.BAD_REQUEST),
     INVALID_IMAGE_FORMAT(1023, "Only JPG, JPEG, and PNG image formats are allowed", HttpStatus.BAD_REQUEST),
     CLOUDINARY_UPLOAD_FAILED(1024, "Image upload failed. Please check Cloudinary configuration or try again", HttpStatus.INTERNAL_SERVER_ERROR),
-    ACCESS_DENIED_TO_RESOURCE(1025, "You do not have permission to access or modify this resource", HttpStatus.FORBIDDEN);
+    ACCESS_DENIED_TO_RESOURCE(1025, "You do not have permission to access or modify this resource", HttpStatus.FORBIDDEN),
+    ROOM_TYPE_IN_USE(1026, "Cannot delete room type that is currently assigned to rooms", HttpStatus.BAD_REQUEST);
 
     private final int code;
     private final String message;
