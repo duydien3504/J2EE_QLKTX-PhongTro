@@ -40,6 +40,21 @@ public class RoomController {
                 .build();
     }
 
+    @PutMapping("/room-types/{id}")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    public ApiResponse<RoomTypeResponse> updateRoomType(@PathVariable Integer id, @RequestBody @Valid RoomTypeRequest request) {
+        return ApiResponse.<RoomTypeResponse>builder()
+                .result(roomService.updateRoomType(id, request))
+                .build();
+    }
+
+    @DeleteMapping("/room-types/{id}")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    public ApiResponse<Void> deleteRoomType(@PathVariable Integer id) {
+        roomService.deleteRoomType(id);
+        return ApiResponse.<Void>builder().build();
+    }
+
     // Room Endpoints
     @GetMapping("/rooms")
     public ApiResponse<List<RoomResponse>> getRooms(

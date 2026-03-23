@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface RoomRepository extends JpaRepository<Room, Integer> {
     List<Room> findAllByFloor_Building_Manager_Username(String username);
+    boolean existsByRoomType_RoomTypeId(Integer roomTypeId);
 }
