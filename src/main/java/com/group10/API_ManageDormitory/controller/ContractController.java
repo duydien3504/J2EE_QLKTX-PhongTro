@@ -2,7 +2,9 @@ package com.group10.API_ManageDormitory.controller;
 
 import com.group10.API_ManageDormitory.dtos.request.ContractRequest;
 import com.group10.API_ManageDormitory.dtos.request.MemberRequest;
+import com.group10.API_ManageDormitory.dtos.request.RoomRegistrationRequest;
 import com.group10.API_ManageDormitory.dtos.response.ApiResponse;
+import com.group10.API_ManageDormitory.dtos.response.ContractRegistrationResponse;
 import com.group10.API_ManageDormitory.dtos.response.ContractResponse;
 import com.group10.API_ManageDormitory.service.ContractService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,7 +23,7 @@ public class ContractController {
     private final ContractService contractService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<List<ContractResponse>> getContracts(@RequestParam(required = false) String status) {
         return ApiResponse.<List<ContractResponse>>builder()
                 .result(contractService.getContracts(status))
@@ -29,7 +31,7 @@ public class ContractController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF') or hasAuthority('SCOPE_TENANT')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF') or hasAuthority('SCOPE_TENANT')")
     public ApiResponse<ContractResponse> getContract(@PathVariable Integer id) {
         return ApiResponse.<ContractResponse>builder()
                 .result(contractService.getContract(id))
@@ -41,6 +43,14 @@ public class ContractController {
     public ApiResponse<ContractResponse> createContract(@RequestBody @Valid ContractRequest request) {
         return ApiResponse.<ContractResponse>builder()
                 .result(contractService.createContract(request))
+                .build();
+    }
+
+    @PostMapping("/register")
+    @PreAuthorize("hasAuthority('SCOPE_USER') or hasAuthority('SCOPE_TENANT')")
+    public ApiResponse<ContractRegistrationResponse> registerContract(@RequestBody @Valid RoomRegistrationRequest request) {
+        return ApiResponse.<ContractRegistrationResponse>builder()
+                .result(contractService.registerContract(request))
                 .build();
     }
 
@@ -94,5 +104,11 @@ public class ContractController {
         return ApiResponse.<com.group10.API_ManageDormitory.dtos.response.LiquidationResponse>builder()
                 .result(contractService.getLiquidation(id))
                 .build();
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    public void deleteContract(@PathVariable Integer id) {
+        contractService.deleteContract(id);
     }
 }

@@ -21,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @org.springframework.stereotype.Service
@@ -44,7 +43,7 @@ public class MeterReadingService {
         if (user != null && user.getRole() != null && "TENANT".equals(user.getRole().getRoleName())) {
             Tenant tenant = tenantRepository.findByUser_UserId(user.getUserId()).orElse(null);
             if (tenant != null) {
-                ContractTenant contractTenant = contractTenantRepository.findByTenant_TenantId(tenant.getTenantId()).orElse(null);
+                ContractTenant contractTenant = contractTenantRepository.findByTenant_TenantIdAndContract_IsDeletedFalse(tenant.getTenantId()).orElse(null);
                 if (contractTenant != null) {
                     Integer tenantRoomId = contractTenant.getContract().getRoom().getRoomId();
                     if (roomId != null && !roomId.equals(tenantRoomId)) {

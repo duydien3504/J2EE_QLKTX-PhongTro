@@ -13,4 +13,6 @@ import java.math.BigDecimal;
 public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
     @Query("SELECT SUM(i.totalAmount) FROM Invoice i WHERE i.month = :month AND i.year = :year AND i.paymentStatus = 'PAID'")
     BigDecimal getTotalRevenueByMonthAndYear(@Param("month") Integer month, @Param("year") Integer year);
+
+    java.util.List<Invoice> findByContract_ContractId(Integer contractId);
 }
