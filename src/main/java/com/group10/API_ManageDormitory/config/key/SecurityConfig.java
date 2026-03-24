@@ -39,7 +39,8 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html")
+                                "/swagger-ui.html",
+                                "/api/payments/momo/**")
                         .permitAll() // Public Endpoints
                         .anyRequest().authenticated()); // Secure all other /api/** endpoints (me, change-password,
                                                         // etc.)
