@@ -33,8 +33,9 @@ public enum ErrorCode {
     INVALID_IMAGE_FORMAT(1023, "Only JPG, JPEG, and PNG image formats are allowed", HttpStatus.BAD_REQUEST),
     CLOUDINARY_UPLOAD_FAILED(1024, "Image upload failed. Please check Cloudinary configuration or try again", HttpStatus.INTERNAL_SERVER_ERROR),
     ACCESS_DENIED_TO_RESOURCE(1025, "You do not have permission to access or modify this resource", HttpStatus.FORBIDDEN),
-    INCIDENT_NOT_FOUND(1026, "Incident not found", HttpStatus.NOT_FOUND),
-    NOTIFICATION_NOT_FOUND(1027, "Notification not found", HttpStatus.NOT_FOUND);
+    ROOM_TYPE_IN_USE(1026, "Cannot delete room type that is currently assigned to rooms", HttpStatus.BAD_REQUEST),
+    INCIDENT_NOT_FOUND(1027, "Incident not found", HttpStatus.NOT_FOUND),
+    NOTIFICATION_NOT_FOUND(1028, "Notification not found", HttpStatus.NOT_FOUND);
     private final int code;
     private final String message;
     private final HttpStatus statusCode;

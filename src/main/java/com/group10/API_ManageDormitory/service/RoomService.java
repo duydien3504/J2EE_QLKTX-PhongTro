@@ -52,6 +52,26 @@ public class RoomService {
         return toRoomTypeResponse(roomTypeRepository.save(roomType));
     }
 
+    public RoomTypeResponse updateRoomType(Integer id, RoomTypeRequest request) {
+        RoomType roomType = roomTypeRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (request.getTypeName() != null) roomType.setTypeName(request.getTypeName());
+        if (request.getBasePrice() != null) roomType.setBasePrice(request.getBasePrice());
+        if (request.getArea() != null) roomType.setArea(request.getArea());
+        if (request.getMaxOccupancy() != null) roomType.setMaxOccupancy(request.getMaxOccupancy());
+        if (request.getDescription() != null) roomType.setDescription(request.getDescription());
+        return toRoomTypeResponse(roomTypeRepository.save(roomType));
+    }
+
+    public void deleteRoomType(Integer id) {
+        RoomType roomType = roomTypeRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (roomRepository.existsByRoomType_RoomTypeId(id)) {
+            throw new AppException(ErrorCode.ROOM_TYPE_IN_USE);
+        }
+        roomTypeRepository.delete(roomType);
+    }
+
     // Room Operations
     public List<RoomResponse> getRooms(Integer floorId, String status, BigDecimal minPrice, BigDecimal maxPrice) {
         String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
@@ -233,11 +253,13 @@ public class RoomService {
                 .roomNumber(room.getRoomNumber())
                 .floorId(room.getFloor().getFloorId())
                 .floorName(room.getFloor().getFloorName())
+                .buildingId(room.getFloor().getBuilding().getBuildingId())
                 .buildingName(room.getFloor().getBuilding().getBuildingName())
                 .roomTypeId(room.getRoomType().getRoomTypeId())
                 .roomTypeName(room.getRoomType().getTypeName())
                 .price(room.getRoomType().getBasePrice())
                 .currentStatus(room.getCurrentStatus())
+                .description(room.getRoomType().getDescription())
                 .imageUrls(imageUrls)
                 .build();
     }
