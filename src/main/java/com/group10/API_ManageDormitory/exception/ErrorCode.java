@@ -35,7 +35,8 @@ public enum ErrorCode {
     ACCESS_DENIED_TO_RESOURCE(1025, "You do not have permission to access or modify this resource", HttpStatus.FORBIDDEN),
     ROOM_TYPE_IN_USE(1026, "Cannot delete room type that is currently assigned to rooms", HttpStatus.BAD_REQUEST),
     INCIDENT_NOT_FOUND(1027, "Incident not found", HttpStatus.NOT_FOUND),
-    NOTIFICATION_NOT_FOUND(1028, "Notification not found", HttpStatus.NOT_FOUND);
+    NOTIFICATION_NOT_FOUND(1028, "Notification not found", HttpStatus.NOT_FOUND),
+    INVOICE_NOT_FOUND(1029, "Invoice not found", HttpStatus.NOT_FOUND);
     private final int code;
     private final String message;
     private final HttpStatus statusCode;

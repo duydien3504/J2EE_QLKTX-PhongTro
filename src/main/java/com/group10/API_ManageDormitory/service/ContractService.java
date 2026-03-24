@@ -9,10 +9,12 @@ import com.group10.API_ManageDormitory.dtos.response.LiquidationResponse;
 import com.group10.API_ManageDormitory.entity.*;
 import com.group10.API_ManageDormitory.exception.AppException;
 import com.group10.API_ManageDormitory.exception.ErrorCode;
-import com.group10.API_ManageDormitory.repository.ContractRepository;
-import com.group10.API_ManageDormitory.repository.ContractTenantRepository;
-import com.group10.API_ManageDormitory.repository.RoomRepository;
-import com.group10.API_ManageDormitory.repository.TenantRepository;
+import com.group10.API_ManageDormitory.repository.*;
+import com.group10.API_ManageDormitory.utils.SecurityUtils;
+import com.group10.API_ManageDormitory.dtos.request.RoomRegistrationRequest;
+import com.group10.API_ManageDormitory.dtos.response.ContractRegistrationResponse;
+import com.group10.API_ManageDormitory.dtos.response.InvoiceResponse;
+import com.group10.API_ManageDormitory.utils.momo.MoMoResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -34,11 +36,14 @@ public class ContractService {
     private final ContractTenantRepository contractTenantRepository;
     private final RoomRepository roomRepository;
     private final TenantRepository tenantRepository;
+    private final UserRepository userRepository;
+    private final InvoiceRepository invoiceRepository;
+    private final MoMoService moMoService;
 
     @Transactional(readOnly = true)
     public List<ContractResponse> getContracts(String status) {
         // Simple filtering in stream
-        return contractRepository.findAll().stream()
+        return contractRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> {
                     if (status == null || status.isEmpty())
                         return true;
@@ -56,7 +61,7 @@ public class ContractService {
     }
 
     public ContractResponse getContract(Integer id) {
-        Contract contract = contractRepository.findById(id)
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
         return toContractResponse(contract);
     }
@@ -99,8 +104,126 @@ public class ContractService {
     }
 
     @Transactional
+    public ContractRegistrationResponse registerContract(RoomRegistrationRequest request) {
+        String username = SecurityUtils.getCurrentUsername();
+        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        Room room = roomRepository.findById(request.getRoomId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+
+        if (!"AVAILABLE".equalsIgnoreCase(room.getCurrentStatus())) {
+            throw new AppException(ErrorCode.ROOM_NOT_AVAILABLE);
+        }
+
+        // Find or create Tenant for this user
+        Tenant tenant = tenantRepository.findByUser_UserId(user.getUserId())
+                .orElseGet(() -> {
+                    Tenant newTenant = Tenant.builder()
+                            .user(user)
+                            .fullName(user.getFullName() != null ? user.getFullName() : user.getUsername())
+                            .email(user.getEmail())
+                            .build();
+                    return tenantRepository.save(newTenant);
+                });
+
+        // Create Contract (Status: WAITING_DEPOSIT)
+        Contract contract = Contract.builder()
+                .room(room)
+                .startDate(request.getStartDate())
+                .endDate(request.getEndDate())
+                .rentalPrice(room.getRoomType().getBasePrice())
+                .depositAmount(room.getRoomType().getBasePrice()) // Default 1 month deposit
+                .paymentCycle(1)
+                .contractStatus("WAITING_DEPOSIT")
+                .build();
+
+        contract = contractRepository.save(contract);
+
+        // Link Tenant to Contract
+        ContractTenant link = ContractTenant.builder()
+                .contract(contract)
+                .tenant(tenant)
+                .isRepresentative(true)
+                .build();
+        contractTenantRepository.save(link);
+
+        // Create Deposit Invoice
+        Invoice depositInvoice = Invoice.builder()
+                .contract(contract)
+                .month(request.getStartDate().getMonthValue())
+                .year(request.getStartDate().getYear())
+                .createdDate(LocalDate.now())
+                .dueDate(LocalDate.now().plusDays(3))
+                .totalAmount(contract.getDepositAmount())
+                .paymentStatus("PENDING")
+                .paymentMethod(request.getPaymentMethod())
+                .notes("Tiền cọc giữ phòng " + room.getRoomNumber())
+                .build();
+
+        depositInvoice = invoiceRepository.save(depositInvoice);
+
+        // If MoMo, generate payUrl
+        String payUrl = null;
+        if ("MOMO".equalsIgnoreCase(request.getPaymentMethod())) {
+            try {
+                MoMoResponse moMoResponse = 
+                    moMoService.createPayment(depositInvoice.getInvoiceId());
+                payUrl = moMoResponse.getPayUrl();
+            } catch (Exception e) {
+                System.err.println("MoMo payment initiation failed: " + e.getMessage());
+            }
+        }
+
+        // Lock room status
+        room.setCurrentStatus("OCCUPIED");
+        roomRepository.save(room);
+
+        return ContractRegistrationResponse.builder()
+                .contract(toContractResponse(contract))
+                .depositInvoice(toInvoiceResponse(depositInvoice))
+                .payUrl(payUrl)
+                .build();
+    }
+
+    private InvoiceResponse toInvoiceResponse(Invoice invoice) {
+        if (invoice == null) return null;
+
+        InvoiceResponse.RoomSummary roomSummary = null;
+        if (invoice.getContract() != null && invoice.getContract().getRoom() != null) {
+            roomSummary = InvoiceResponse.RoomSummary.builder()
+                    .roomId(invoice.getContract().getRoom().getRoomId())
+                    .roomNumber(invoice.getContract().getRoom().getRoomNumber())
+                    .build();
+        }
+
+        InvoiceResponse.ContractSummary contractSummary = null;
+        if (invoice.getContract() != null) {
+            contractSummary = InvoiceResponse.ContractSummary.builder()
+                    .contractId(invoice.getContract().getContractId())
+                    .room(roomSummary)
+                    .build();
+        }
+
+        return InvoiceResponse.builder()
+                .invoiceId(invoice.getInvoiceId())
+                .contract(contractSummary)
+                .month(invoice.getMonth())
+                .year(invoice.getYear())
+                .createdDate(invoice.getCreatedDate())
+                .dueDate(invoice.getDueDate())
+                .totalAmount(invoice.getTotalAmount())
+                .paymentStatus(invoice.getPaymentStatus())
+                .notes(invoice.getNotes())
+                .build();
+    }
+
+
+    @Transactional
     public ContractResponse updateContract(Integer id, ContractRequest request) {
-        Contract contract = contractRepository.findById(id)
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
         if (request.getRentalPrice() != null)
@@ -115,13 +238,13 @@ public class ContractService {
 
     @Transactional
     public ContractResponse addMember(Integer contractId, MemberRequest request) {
-        Contract contract = contractRepository.findById(contractId)
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
         Tenant tenant = tenantRepository.findById(request.getTenantId())
                 .orElseThrow(() -> new AppException(ErrorCode.TENANT_NOT_FOUND));
 
-        List<ContractTenant> members = contractTenantRepository.findByContract_ContractId(contractId);
+        List<ContractTenant> members = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contractId);
         Room room = contract.getRoom();
         if (room.getRoomType().getMaxOccupancy() != null && members.size() >= room.getRoomType().getMaxOccupancy()) {
             throw new AppException(ErrorCode.OCCUPANCY_LIMIT_REACHED);
@@ -144,8 +267,25 @@ public class ContractService {
     }
 
     @Transactional
+    public void deleteContract(Integer id) {
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+        // Nếu hợp đồng đang ACTIVE hoặc WAITING_DEPOSIT, giải phóng phòng
+        if ("ACTIVE".equalsIgnoreCase(contract.getContractStatus()) || 
+            "WAITING_DEPOSIT".equalsIgnoreCase(contract.getContractStatus())) {
+            Room room = contract.getRoom();
+            room.setCurrentStatus("AVAILABLE");
+            roomRepository.save(room);
+        }
+
+        // Hibernate @SQLDelete will handle the is_deleted = true
+        contractRepository.delete(contract);
+    }
+
+    @Transactional
     public void removeMember(Integer contractId, Integer tenantId) {
-        List<ContractTenant> members = contractTenantRepository.findByContract_ContractId(contractId);
+        List<ContractTenant> members = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contractId);
         ContractTenant target = members.stream()
                 .filter(m -> m.getTenant().getTenantId().equals(tenantId))
                 .findFirst()
@@ -160,7 +300,7 @@ public class ContractService {
 
     @Transactional
     public LiquidationResponse terminateContract(Integer id, TerminateRequest request) {
-        Contract contract = contractRepository.findById(id)
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
         if (!"ACTIVE".equalsIgnoreCase(contract.getContractStatus())) {
@@ -193,7 +333,7 @@ public class ContractService {
     }
 
     public LiquidationResponse getLiquidation(Integer id) {
-        Contract contract = contractRepository.findById(id)
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
         return toLiquidationResponse(contract);
@@ -212,7 +352,7 @@ public class ContractService {
     }
 
     public void downloadContract(Integer id, HttpServletResponse response) throws IOException {
-        Contract contract = contractRepository.findById(id)
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
         ContractResponse dto = toContractResponse(contract);
 
@@ -248,7 +388,7 @@ public class ContractService {
     }
 
     private ContractResponse toContractResponse(Contract contract) {
-        List<ContractTenant> members = contractTenantRepository.findByContract_ContractId(contract.getContractId());
+        List<ContractTenant> members = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contract.getContractId());
 
         List<ContractMemberResponse> memberDtos = members.stream().map(m -> ContractMemberResponse.builder()
                 .contractTenantId(m.getContractTenantId())

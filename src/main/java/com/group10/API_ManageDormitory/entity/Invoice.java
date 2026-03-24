@@ -5,6 +5,8 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import org.hibernate.annotations.NotFound;
+import org.hibernate.annotations.NotFoundAction;
 
 @Entity
 @Table(name = "Invoices")
@@ -22,6 +24,7 @@ public class Invoice {
     @ManyToOne
     @JoinColumn(name = "contract_id", nullable = false)
     @JsonIgnoreProperties({"invoices"})
+    @NotFound(action = NotFoundAction.IGNORE)
     private Contract contract;
 
     @Column(name = "month", nullable = false)

@@ -6,12 +6,15 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
+
 @Entity
 @Table(name = "Contracts")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@SQLDelete(sql = "UPDATE contracts SET is_deleted = true WHERE contract_id = ?")
 public class Contract {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -60,5 +63,12 @@ public class Contract {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
         }
+        if (isDeleted == null) {
+            isDeleted = false;
+        }
     }
+
+    @Builder.Default
+    @Column(name = "is_deleted")
+    private Boolean isDeleted = false;
 }

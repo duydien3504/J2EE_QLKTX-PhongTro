@@ -2,8 +2,10 @@ package com.group10.API_ManageDormitory.service;
 
 import com.google.gson.Gson;
 import com.group10.API_ManageDormitory.config.MoMoConfig;
+import com.group10.API_ManageDormitory.entity.Contract;
 import com.group10.API_ManageDormitory.entity.Invoice;
 import com.group10.API_ManageDormitory.entity.Payment;
+import com.group10.API_ManageDormitory.repository.ContractRepository;
 import com.group10.API_ManageDormitory.repository.InvoiceRepository;
 import com.group10.API_ManageDormitory.repository.PaymentRepository;
 import com.group10.API_ManageDormitory.utils.momo.MoMoEncoder;
@@ -24,6 +26,7 @@ public class MoMoService {
     private final MoMoConfig moMoConfig;
     private final InvoiceRepository invoiceRepository;
     private final PaymentRepository paymentRepository;
+    private final ContractRepository contractRepository;
     private final Gson gson = new Gson();
     private final OkHttpClient httpClient = new OkHttpClient();
 
@@ -161,6 +164,13 @@ public class MoMoService {
                         invoice.setLastTransactionStatus("SUCCESS");
                         invoice.setPaymentMethod("MoMo");
                         invoiceRepository.save(invoice);
+
+                        // Cập nhật trạng thái hợp đồng nếu là hóa đơn cọc và đã thanh toán
+                        Contract contract = invoice.getContract();
+                        if (contract != null && "WAITING_DEPOSIT".equalsIgnoreCase(contract.getContractStatus())) {
+                            contract.setContractStatus("ACTIVE");
+                            contractRepository.save(contract);
+                        }
 
                         Payment payment = Payment.builder()
                                 .invoice(invoice)
