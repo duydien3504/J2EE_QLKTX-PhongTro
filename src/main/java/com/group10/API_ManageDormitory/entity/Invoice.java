@@ -42,6 +42,12 @@ public class Invoice {
     @Column(name = "payment_status")
     private String paymentStatus;
 
+    @Column(name = "payment_method")
+    private String paymentMethod;
+
+    @Column(name = "last_transaction_status")
+    private String lastTransactionStatus;
+
     @Column(name = "notes")
     private String notes;
 }
