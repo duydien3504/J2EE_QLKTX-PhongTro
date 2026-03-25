@@ -27,7 +27,10 @@ public class DataInitializer implements CommandLineRunner {
         ensureRoleExists("Tenant", "Tenant");
 
         if (userRepository.findByUsername("admin").isEmpty()) {
-            roleRepository.findByRoleName("Admin").ifPresent(adminRole -> {
+            roleRepository.findAll().stream()
+                    .filter(r -> r.getRoleName().equalsIgnoreCase("Admin"))
+                    .findFirst()
+                    .ifPresent(adminRole -> {
                 User admin = User.builder()
                         .username("admin")
                         .passwordHash(passwordEncoder.encode("admin"))
@@ -42,7 +45,10 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void ensureRoleExists(String roleName, String description) {
-        if (roleRepository.findByRoleName(roleName).isEmpty()) {
+        boolean exists = roleRepository.findAll().stream()
+                .anyMatch(r -> r.getRoleName().equalsIgnoreCase(roleName));
+        
+        if (!exists) {
             roleRepository.save(Role.builder()
                     .roleName(roleName)
                     .description(description)

@@ -41,6 +41,23 @@ public class UserController {
                 .build();
     }
 
+    @PutMapping("/{id}/role")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    public ApiResponse<UserResponse> assignRole(@PathVariable Integer id, @RequestBody java.util.Map<String, String> body) {
+        String roleName = body.get("roleName");
+        return ApiResponse.<UserResponse>builder()
+                .result(userService.assignRole(id, roleName))
+                .build();
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    public ApiResponse<UserResponse> updateUser(@PathVariable Integer id, @RequestBody UserCreationRequest request) {
+        return ApiResponse.<UserResponse>builder()
+                .result(userService.updateUser(id, request))
+                .build();
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
     public ApiResponse<String> deleteUser(@PathVariable Integer id) {
