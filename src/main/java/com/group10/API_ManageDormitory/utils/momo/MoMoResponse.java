@@ -15,4 +15,5 @@ public class MoMoResponse {
     private String deeplink;
     private String qrCodeUrl;
     private String signature;
+    private Long transId;
 }

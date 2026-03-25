@@ -110,6 +110,7 @@ public class MoMoService {
     }
 
     public MoMoResponse queryStatus(String orderId) throws IOException {
+        System.out.println("Querying MoMo status for OrderId: " + orderId);
         String requestId = UUID.randomUUID().toString();
         String rawSignature = "accessKey=" + moMoConfig.getAccessKey() +
                 "&orderId=" + orderId +
@@ -142,34 +143,55 @@ public class MoMoService {
 
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
-            return gson.fromJson(responseBody, MoMoResponse.class);
+            System.out.println("MoMo Query Response: " + responseBody);
+            MoMoResponse moMoResponse = gson.fromJson(responseBody, MoMoResponse.class);
+            
+            // Nếu query thấy thành công mà DB chưa cập nhật thì cập nhật luôn
+            if (moMoResponse != null && moMoResponse.getResultCode() == 0) {
+                processIPN(responseBody); // Tận dụng logic xử lý IPN để update DB
+            }
+            
+            return moMoResponse;
         }
     }
 
     public void processIPN(String body) {
-        MoMoResponse response = gson.fromJson(body, MoMoResponse.class);
+        System.out.println("MoMo IPN Received: " + body);
+        try {
+            MoMoResponse response = gson.fromJson(body, MoMoResponse.class);
 
-        // In a real scenario, you MUST verify the signature from MoMo here
-        // For simplicity and demo purposes, we'll assume it's valid if resultCode is 0
+            if (response == null) {
+                System.out.println("MoMo IPN Error: Response body is null");
+                return;
+            }
 
-        if (response.getResultCode() == 0) {
-            String orderId = response.getOrderId(); // Format: INV-invoiceId-timestamp
-            Integer invoiceId = Integer.parseInt(orderId.split("-")[1]);
-
-            Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
-            if (invoice != null) {
-                if (response.getResultCode() == 0) {
+            if (response.getResultCode() == 0) {
+                String orderId = response.getOrderId(); // Format: INV-invoiceId-timestamp
+                System.out.println("Processing successful payment for OrderId: " + orderId);
+                
+                String[] parts = orderId.split("-");
+                if (parts.length < 2) {
+                    System.out.println("MoMo IPN Error: Invalid OrderId format: " + orderId);
+                    return;
+                }
+                
+                Integer invoiceId = Integer.parseInt(parts[1]);
+                Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
+                
+                if (invoice != null) {
+                    System.out.println("Updating Invoice #" + invoiceId + " to PAID");
                     if (!"PAID".equalsIgnoreCase(invoice.getPaymentStatus())) {
                         invoice.setPaymentStatus("PAID");
                         invoice.setLastTransactionStatus("SUCCESS");
                         invoice.setPaymentMethod("MoMo");
                         invoiceRepository.save(invoice);
 
-                        // Cập nhật trạng thái hợp đồng nếu là hóa đơn cọc và đã thanh toán
+                        // Cập nhật trạng thái hợp đồng nếu là hóa đơn cọc
                         Contract contract = invoice.getContract();
                         if (contract != null && "WAITING_DEPOSIT".equalsIgnoreCase(contract.getContractStatus())) {
                             contract.setContractStatus("ACTIVE");
                             contractRepository.save(contract);
+                            System.out.println("Contract Status updated to ACTIVE");
                         }
 
                         Payment payment = Payment.builder()
@@ -177,15 +199,22 @@ public class MoMoService {
                                 .paymentDate(LocalDateTime.now())
                                 .amountPaid(invoice.getTotalAmount())
                                 .paymentMethod("MoMo")
-                                .transactionCode(response.getRequestId())
+                                .transactionCode(response.getTransId() != null ? response.getTransId().toString() : response.getRequestId())
                                 .build();
                         paymentRepository.save(payment);
+                        System.out.println("Payment record created successfully");
+                    } else {
+                        System.out.println("Invoice #" + invoiceId + " was already marked as PAID");
                     }
                 } else {
-                    invoice.setLastTransactionStatus("FAILED");
-                    invoiceRepository.save(invoice);
+                    System.out.println("MoMo IPN Error: Invoice not found for ID: " + invoiceId);
                 }
+            } else {
+                System.out.println("MoMo Payment Failed or Cancelled. ResultCode: " + response.getResultCode());
             }
+        } catch (Exception e) {
+            System.err.println("Error processing MoMo IPN: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

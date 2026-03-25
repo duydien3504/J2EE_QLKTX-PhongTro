@@ -74,18 +74,10 @@ public class RoomService {
 
     // Room Operations
     public List<RoomResponse> getRooms(Integer floorId, String status, BigDecimal minPrice, BigDecimal maxPrice) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN")
-                || com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
+        // Return all rooms regardless of user's role or ownership
+        List<Room> rooms = roomRepository.findAll();
 
-        List<Room> rooms;
-        if (isAdmin || username == null) {
-            rooms = roomRepository.findAll();
-        } else {
-            rooms = roomRepository.findAllByFloor_Building_Manager_Username(username);
-        }
-
-        // Manual Filtering
+        // Manual Filtering for parameters
         return rooms.stream()
                 .filter(room -> floorId == null || room.getFloor().getFloorId().equals(floorId))
                 .filter(room -> status == null || status.trim().isEmpty()
