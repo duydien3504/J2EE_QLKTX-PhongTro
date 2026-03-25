@@ -111,4 +111,13 @@ public class ContractController {
     public void deleteContract(@PathVariable Integer id) {
         contractService.deleteContract(id);
     }
+
+    @DeleteMapping("/{id}/cancel")
+    @PreAuthorize("hasAuthority('SCOPE_USER') or hasAuthority('SCOPE_TENANT')")
+    public ApiResponse<String> cancelRegistration(@PathVariable Integer id) {
+        contractService.cancelRegistration(id);
+        return ApiResponse.<String>builder()
+                .result("Huỷ đăng ký thành công")
+                .build();
+    }
 }

@@ -76,4 +76,30 @@ public class UserService {
         user.setIsDeleted(true);
         userRepository.save(user);
     }
+
+    public UserResponse assignRole(Integer userId, String roleName) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        Role role = roleRepository.findByRoleName(roleName)
+                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
+        user.setRole(role);
+        return userMapper.toUserResponse(userRepository.save(user));
+    }
+
+    public UserResponse updateUser(Integer id, UserCreationRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        if (request.getFullName() != null) user.setFullName(request.getFullName());
+        if (request.getEmail() != null) user.setEmail(request.getEmail());
+        if (request.getPhoneNumber() != null) user.setPhoneNumber(request.getPhoneNumber());
+
+        if (request.getRoleName() != null) {
+            Role role = roleRepository.findByRoleName(request.getRoleName())
+                    .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
+            user.setRole(role);
+        }
+
+        return userMapper.toUserResponse(userRepository.save(user));
+    }
 }

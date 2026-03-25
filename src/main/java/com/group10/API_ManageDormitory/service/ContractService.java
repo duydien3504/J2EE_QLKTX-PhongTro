@@ -284,6 +284,41 @@ public class ContractService {
     }
 
     @Transactional
+    public void cancelRegistration(Integer id) {
+        String username = SecurityUtils.getCurrentUsername();
+        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
+
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+        // Check if user is the representative of this contract
+        boolean isMine = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(id)
+                .stream()
+                .anyMatch(link -> Boolean.TRUE.equals(link.getIsRepresentative()) && 
+                        link.getTenant().getUser() != null && 
+                        link.getTenant().getUser().getUsername().equals(username));
+
+        if (!isMine) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (!"WAITING_DEPOSIT".equalsIgnoreCase(contract.getContractStatus())) {
+            throw new RuntimeException("Chỉ có thể hủy đăng ký khi đang chờ đặt cọc.");
+        }
+
+        // Release room
+        Room room = contract.getRoom();
+        room.setCurrentStatus("AVAILABLE");
+        roomRepository.save(room);
+
+        // Delete ContractTenant links first to avoid Hibernate transient reference error
+        List<ContractTenant> members = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(id);
+        contractTenantRepository.deleteAll(members);
+
+        contractRepository.delete(contract);
+    }
+
+    @Transactional
     public void removeMember(Integer contractId, Integer tenantId) {
         List<ContractTenant> members = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contractId);
         ContractTenant target = members.stream()
