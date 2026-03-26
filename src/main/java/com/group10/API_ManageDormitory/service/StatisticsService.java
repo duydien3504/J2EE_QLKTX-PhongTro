@@ -25,27 +25,12 @@ public class StatisticsService {
     private final ContractTenantRepository contractTenantRepository;
     private final UserRepository userRepository;
     private final BuildingRepository buildingRepository;
+    private final AccessValidationService accessValidationService;
 
     private void validateBuildingAccess(Integer buildingId) {
-        String username = SecurityUtils.getCurrentUsername();
-        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-
-        String role = (user.getRole() != null ? user.getRole().getRoleName() : "").toUpperCase();
-        if (role.equals("ADMIN") || role.equals("SCOPE_ADMIN")) return;
-
-        if (buildingId == null) {
-            // For managers/owners, if buildingId is null, we aggregate for ALL their buildings
-            return;
-        }
-
-        boolean isAuthorized = buildingRepository.existsByBuildingIdAndManager_UserId(buildingId, user.getUserId())
-                            || buildingRepository.existsByBuildingIdAndOwner_UserId(buildingId, user.getUserId());
-        
-        if (!isAuthorized) {
-            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
+        if (buildingId == null) return;
+        accessValidationService.validateBuildingAccess(buildingRepository.findById(buildingId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND)));
     }
 
     public RevenueMonthResponse getRevenueByMonthAndYear(Integer month, Integer year, Integer buildingId) {
@@ -110,15 +95,7 @@ public class StatisticsService {
         }
 
         long emptyRooms = totalRooms - rentedRooms;
-        long activeTenants;
-        if (buildingId != null) {
-            activeTenants = contractTenantRepository.countActiveTenants(buildingId);
-        } else if (isAdmin) {
-            activeTenants = contractTenantRepository.countActiveTenants(null);
-        } else {
-            // Aggregate for user (Owner + Manager) without double counting
-            activeTenants = contractTenantRepository.countActiveTenantsByUser(user.getUserId());
-        }
+        long activeTenants = contractTenantRepository.countActiveTenantsByUser(buildingId, user.getUserId(), isAdmin);
 
         return RoomStatusStatisticsResponse.builder()
                 .totalRooms(totalRooms)
@@ -162,13 +139,8 @@ public class StatisticsService {
     }
 
     public List<OccupancyByBuildingResponse> getOccupancyByBuilding() {
-        String username = SecurityUtils.getCurrentUsername();
-        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-        
-        String role = (user.getRole() != null ? user.getRole().getRoleName() : "").toUpperCase();
-        boolean isAdmin = role.equals("ADMIN") || role.equals("SCOPE_ADMIN");
+        User user = accessValidationService.getCurrentUser();
+        boolean isAdmin = accessValidationService.isAdmin();
 
         List<Object[]> totalRows;
         List<Object[]> rentedRows;

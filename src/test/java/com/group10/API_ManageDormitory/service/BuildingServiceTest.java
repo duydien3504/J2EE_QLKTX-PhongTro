@@ -28,6 +28,8 @@ class BuildingServiceTest {
     private FloorRepository floorRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private AccessValidationService accessValidationService;
 
     @InjectMocks
     private BuildingService buildingService;

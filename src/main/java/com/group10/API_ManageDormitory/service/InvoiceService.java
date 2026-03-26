@@ -24,18 +24,14 @@ public class InvoiceService {
     private final ContractTenantRepository contractTenantRepository;
     private final InvoiceMapper invoiceMapper;
     private final NotificationService notificationService;
+    private final AccessValidationService accessValidationService;
 
     public PageResponse<InvoiceResponse> getAllInvoices(int page, int size) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
+        User currentUser = accessValidationService.getCurrentUser();
+        boolean isAdmin = accessValidationService.isAdmin();
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<Invoice> invoicePage = invoiceRepository.findAllCustom(username, isAdmin, isManageRole, pageable);
+        Page<Invoice> invoicePage = invoiceRepository.findAllCustom(currentUser.getUsername(), isAdmin, pageable);
 
         List<InvoiceResponse> data = invoicePage.getContent().stream()
                 .map(invoiceMapper::toInvoiceResponse)
@@ -53,7 +49,7 @@ public class InvoiceService {
     public InvoiceResponse getInvoiceById(Integer id) {
         Invoice invoice = invoiceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Invoice not found"));
-        checkInvoiceOwnership(invoice);
+        accessValidationService.validateContractAccess(invoice.getContract());
         return invoiceMapper.toInvoiceResponse(invoice);
     }
 
@@ -68,7 +64,7 @@ public class InvoiceService {
         Contract contract = contractRepository.findById(invoice.getContract().getContractId())
                 .orElseThrow(() -> new RuntimeException("Contract not found"));
 
-        checkContractOwnership(contract);
+        accessValidationService.validateContractAccess(contract);
 
         // gán contract chuẩn từ database
         invoice.setContract(contract);
@@ -99,7 +95,7 @@ public class InvoiceService {
         Invoice existing = invoiceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Invoice not found"));
         
-        checkInvoiceOwnership(existing);
+        accessValidationService.validateContractAccess(existing.getContract());
 
         existing.setMonth(invoice.getMonth());
         existing.setYear(invoice.getYear());
@@ -126,51 +122,9 @@ public class InvoiceService {
     public void deleteInvoice(Integer id) {
         Invoice invoice = invoiceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Invoice not found"));
-        checkInvoiceOwnership(invoice);
+        accessValidationService.validateContractAccess(invoice.getContract());
         invoiceRepository.delete(invoice);
     }
 
-    private void checkInvoiceOwnership(Invoice invoice) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
 
-        if (isAdmin || !isManageRole || username == null) return;
-
-        if (!isInvoiceManagedBy(invoice, username)) {
-            throw new com.group10.API_ManageDormitory.exception.AppException(com.group10.API_ManageDormitory.exception.ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-    }
-
-    private void checkContractOwnership(Contract contract) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-
-        if (isAdmin || !isManageRole || username == null) return;
-
-        if (!isContractManagedBy(contract, username)) {
-            throw new com.group10.API_ManageDormitory.exception.AppException(com.group10.API_ManageDormitory.exception.ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-    }
-
-    private boolean isInvoiceManagedBy(Invoice invoice, String username) {
-        return invoice.getContract() != null && isContractManagedBy(invoice.getContract(), username);
-    }
-
-    private boolean isContractManagedBy(Contract contract, String username) {
-        return contract.getRoom() != null && 
-               contract.getRoom().getFloor() != null && 
-               contract.getRoom().getFloor().getBuilding() != null && 
-               contract.getRoom().getFloor().getBuilding().getManager() != null && 
-               contract.getRoom().getFloor().getBuilding().getManager().getUsername().equals(username);
-    }
 }

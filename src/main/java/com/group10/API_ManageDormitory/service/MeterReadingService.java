@@ -10,13 +10,6 @@ import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.repository.MeterReadingRepository;
 import com.group10.API_ManageDormitory.repository.RoomRepository;
 import com.group10.API_ManageDormitory.repository.ServiceRepository;
-import com.group10.API_ManageDormitory.repository.UserRepository;
-import com.group10.API_ManageDormitory.repository.TenantRepository;
-import com.group10.API_ManageDormitory.repository.ContractTenantRepository;
-import com.group10.API_ManageDormitory.entity.User;
-import com.group10.API_ManageDormitory.entity.Tenant;
-import com.group10.API_ManageDormitory.entity.ContractTenant;
-import org.springframework.security.core.context.SecurityContextHolder;
 import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
@@ -29,38 +22,16 @@ public class MeterReadingService {
     private final MeterReadingRepository meterReadingRepository;
     private final RoomRepository roomRepository;
     private final ServiceRepository serviceRepository;
-    private final UserRepository userRepository;
-    private final TenantRepository tenantRepository;
-    private final ContractTenantRepository contractTenantRepository;
+    private final AccessValidationService accessValidationService;
 
-    private void checkDataOwnership(Integer roomId) {
-        var context = SecurityContextHolder.getContext();
-        if (context == null || context.getAuthentication() == null) return;
-        
-        String username = context.getAuthentication().getName();
-        User user = userRepository.findByUsername(username).orElse(null);
-        
-        if (user != null && user.getRole() != null && "TENANT".equals(user.getRole().getRoleName())) {
-            Tenant tenant = tenantRepository.findByUser_UserId(user.getUserId()).orElse(null);
-            if (tenant != null) {
-                ContractTenant contractTenant = contractTenantRepository.findByTenant_TenantIdAndContract_IsDeletedFalse(tenant.getTenantId()).orElse(null);
-                if (contractTenant != null) {
-                    Integer tenantRoomId = contractTenant.getContract().getRoom().getRoomId();
-                    if (roomId != null && !roomId.equals(tenantRoomId)) {
-                        throw new AppException(ErrorCode.UNAUTHORIZED);
-                    }
-                } else {
-                     throw new AppException(ErrorCode.UNAUTHORIZED);
-                }
-            } else {
-                throw new AppException(ErrorCode.UNAUTHORIZED);
-            }
-        }
-    }
+
 
     public List<MeterReadingResponse> getReadings(Integer roomId, Integer month, Integer year) {
-        checkDataOwnership(roomId);
         if (roomId != null) {
+            Room room = roomRepository.findById(roomId)
+                    .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+            accessValidationService.validateRoomAccess(room);
+            
             if (month != null && year != null) {
                 LocalDate start = LocalDate.of(year, month, 1);
                 LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
@@ -70,18 +41,33 @@ public class MeterReadingService {
             return meterReadingRepository.findByRoom_RoomId(roomId).stream()
                     .map(this::toResponse).collect(Collectors.toList());
         }
-        if (month != null && year != null) {
-            LocalDate start = LocalDate.of(year, month, 1);
-            LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
-            return meterReadingRepository.findByReadingDateBetween(start, end).stream()
-                    .map(this::toResponse).collect(Collectors.toList());
+
+        // For list view without specific roomId, fallback to security filtering
+        List<MeterReading> readings = (month != null && year != null) ?
+                meterReadingRepository.findByReadingDateBetween(LocalDate.of(year, month, 1), LocalDate.of(year, month, 1).withDayOfMonth(LocalDate.of(year, month, 1).lengthOfMonth())) :
+                meterReadingRepository.findAll();
+
+        if (accessValidationService.isAdmin()) {
+            return readings.stream().map(this::toResponse).collect(Collectors.toList());
         }
-        return meterReadingRepository.findAll().stream()
-                .map(this::toResponse).collect(Collectors.toList());
+
+        return readings.stream()
+                .filter(r -> {
+                    try {
+                        accessValidationService.validateRoomAccess(r.getRoom());
+                        return true;
+                    } catch (AppException e) {
+                        return false;
+                    }
+                })
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     public MeterReadingResponse getLastMonthReading(Integer roomId, Integer serviceId) {
-        checkDataOwnership(roomId);
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        accessValidationService.validateRoomAccess(room);
         MeterReading reading = meterReadingRepository
                 .findFirstByRoom_RoomIdAndService_ServiceIdOrderByReadingDateDesc(roomId, serviceId)
                 .orElse(null);
@@ -93,6 +79,7 @@ public class MeterReadingService {
     public MeterReadingResponse recordReading(MeterReadingRequest request) {
         Room room = roomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        accessValidationService.validateRoomAccess(room);
 
         Service service = serviceRepository.findById(request.getServiceId())
                 .orElseThrow(() -> new RuntimeException("Service not found"));
@@ -128,6 +115,7 @@ public class MeterReadingService {
     public MeterReadingResponse updateReading(Integer id, MeterReadingRequest request) {
         MeterReading reading = meterReadingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Meter reading not found"));
+        accessValidationService.validateRoomAccess(reading.getRoom());
 
         if (request.getCurrentIndex() != null) {
             if (request.getCurrentIndex() < reading.getPreviousIndex()) {

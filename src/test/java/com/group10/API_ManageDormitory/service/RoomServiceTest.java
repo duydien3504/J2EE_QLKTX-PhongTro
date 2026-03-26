@@ -46,6 +46,8 @@ class RoomServiceTest {
     private RoomImageRepository roomImageRepository;
     @Mock
     private CloudinaryService cloudinaryService;
+    @Mock
+    private AccessValidationService accessValidationService;
 
     @InjectMocks
     private RoomService roomService;
