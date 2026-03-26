@@ -26,12 +26,13 @@ public class InvoiceService {
     private final NotificationService notificationService;
     private final AccessValidationService accessValidationService;
 
-    public PageResponse<InvoiceResponse> getAllInvoices(int page, int size) {
+    public PageResponse<InvoiceResponse> getAllInvoices(int page, int size, Integer month, Integer year, String status, Integer buildingId, String roomNumber) {
         User currentUser = accessValidationService.getCurrentUser();
         boolean isAdmin = accessValidationService.isAdmin();
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<Invoice> invoicePage = invoiceRepository.findAllCustom(currentUser.getUsername(), isAdmin, pageable);
+        Page<Invoice> invoicePage = invoiceRepository.findAllCustom(
+                currentUser.getUsername(), isAdmin, month, year, status, buildingId, roomNumber, pageable);
 
         List<InvoiceResponse> data = invoicePage.getContent().stream()
                 .map(invoiceMapper::toInvoiceResponse)
