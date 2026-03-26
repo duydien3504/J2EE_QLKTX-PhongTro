@@ -1,6 +1,7 @@
 package com.group10.API_ManageDormitory.service;
 
 import com.group10.API_ManageDormitory.entity.Payment;
+import com.group10.API_ManageDormitory.entity.User;
 import com.group10.API_ManageDormitory.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,10 +16,14 @@ import org.springframework.data.domain.Pageable;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final AccessValidationService accessValidationService;
 
     public PageResponse<Payment> getAllPayments(int page, int size){
+        User currentUser = accessValidationService.getCurrentUser();
+        boolean isAdmin = accessValidationService.isAdmin();
+
         Pageable pageable = PageRequest.of(page, size);
-        Page<Payment> paymentPage = paymentRepository.findAll(pageable);
+        Page<Payment> paymentPage = paymentRepository.findAllCustom(currentUser.getUsername(), isAdmin, pageable);
         
         return PageResponse.<Payment>builder()
                 .data(paymentPage.getContent())

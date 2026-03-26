@@ -28,10 +28,16 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
 
     java.util.List<Invoice> findByContract_ContractId(Integer contractId);
 
-    @Query("SELECT i FROM Invoice i WHERE " +
-            "(:isAdmin = true OR " +
-            "i.contract.room.floor.building.manager.username = :username OR " +
-            "i.contract.room.floor.building.owner.username = :username)")
+    @Query("SELECT i FROM Invoice i " +
+            "LEFT JOIN i.contract c " +
+            "LEFT JOIN c.room r " +
+            "LEFT JOIN r.floor f " +
+            "LEFT JOIN f.building b " +
+            "LEFT JOIN b.manager m " +
+            "LEFT JOIN b.owner o " +
+            "WHERE :isAdmin = true " +
+            "OR m.username = :username " +
+            "OR o.username = :username")
     Page<Invoice> findAllCustom(@Param("username") String username,
                                 @Param("isAdmin") boolean isAdmin,
                                 Pageable pageable);

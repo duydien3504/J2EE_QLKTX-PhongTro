@@ -72,7 +72,7 @@ public class RoomService {
     public List<RoomResponse> getRooms(Integer floorId, String status, BigDecimal minPrice, BigDecimal maxPrice) {
         List<Room> rooms = roomRepository.findAll();
 
-        if (accessValidationService.isAdmin()) {
+        if (accessValidationService.isAdmin() || accessValidationService.isTenant()) {
             return rooms.stream()
                 .filter(room -> floorId == null || room.getFloor().getFloorId().equals(floorId))
                 .filter(room -> status == null || status.trim().isEmpty() || (room.getCurrentStatus() != null && room.getCurrentStatus().equalsIgnoreCase(status)))
@@ -82,8 +82,18 @@ public class RoomService {
                 .collect(Collectors.toList());
         }
 
+        // For Manage roles (OWNER, STAFF), they only see their own buildings
+        // For unauthenticated/guest users, we skip hasRoomAccess filter to allow public browsing
+        boolean isUnauth = false;
+        try {
+            accessValidationService.getCurrentUser();
+        } catch (AppException e) {
+            isUnauth = true;
+        }
+        final boolean isUnauthenticated = isUnauth;
+
         return rooms.stream()
-                .filter(accessValidationService::hasRoomAccess)
+                .filter(room -> isUnauthenticated || !accessValidationService.isManageRole() || accessValidationService.hasRoomAccess(room))
                 .filter(room -> floorId == null || room.getFloor().getFloorId().equals(floorId))
                 .filter(room -> status == null || status.trim().isEmpty()
                         || (room.getCurrentStatus() != null && room.getCurrentStatus().equalsIgnoreCase(status)))
@@ -98,7 +108,14 @@ public class RoomService {
     public RoomResponse getRoomDetail(Integer id) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        accessValidationService.validateRoomAccess(room);
+                
+        // Only enforce management-level scoping for OWNER/STAFF. 
+        // ADMIN, TENANT, and Public guests can view all room details.
+        boolean isManageRole = accessValidationService.isManageRole() && !accessValidationService.isAdmin();
+        if (isManageRole && !accessValidationService.hasRoomAccess(room)) {
+            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+        }
+        
         return toRoomResponse(room);
     }
 
