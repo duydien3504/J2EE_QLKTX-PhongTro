@@ -83,14 +83,7 @@ public class RoomService {
         }
 
         return rooms.stream()
-                .filter(room -> {
-                    try {
-                        accessValidationService.validateRoomAccess(room);
-                        return true;
-                    } catch (AppException e) {
-                        return false;
-                    }
-                })
+                .filter(accessValidationService::hasRoomAccess)
                 .filter(room -> floorId == null || room.getFloor().getFloorId().equals(floorId))
                 .filter(room -> status == null || status.trim().isEmpty()
                         || (room.getCurrentStatus() != null && room.getCurrentStatus().equalsIgnoreCase(status)))

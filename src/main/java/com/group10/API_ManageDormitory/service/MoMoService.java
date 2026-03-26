@@ -116,16 +116,20 @@ public class MoMoService {
         // Extract invoiceId from orderId (Format: INV-invoiceId-timestamp)
         try {
             String[] parts = orderId.split("-");
-            if (parts.length >= 2) {
-                Integer invoiceId = Integer.parseInt(parts[1]);
-                Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
-                if (invoice != null) {
-                    accessValidationService.validateContractAccess(invoice.getContract());
-                }
+            if (parts.length < 2) {
+                throw new AppException(ErrorCode.INVALID_INPUT);
             }
+            Integer invoiceId = Integer.parseInt(parts[1]);
+            Invoice invoice = invoiceRepository.findById(invoiceId)
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+                    
+            if (!accessValidationService.hasContractAccess(invoice.getContract())) {
+                throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+            }
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
-            // If parsing fails, we still proceed to MoMo query but it will likely fail there too
-            System.err.println("Failed to validate access for orderId: " + orderId);
+            throw new AppException(ErrorCode.INVALID_INPUT);
         }
 
         String requestId = UUID.randomUUID().toString();

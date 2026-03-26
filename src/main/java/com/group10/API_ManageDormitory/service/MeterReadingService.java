@@ -52,14 +52,7 @@ public class MeterReadingService {
         }
 
         return readings.stream()
-                .filter(r -> {
-                    try {
-                        accessValidationService.validateRoomAccess(r.getRoom());
-                        return true;
-                    } catch (AppException e) {
-                        return false;
-                    }
-                })
+                .filter(r -> accessValidationService.hasRoomAccess(r.getRoom()))
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
