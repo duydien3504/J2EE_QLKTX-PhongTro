@@ -3,8 +3,6 @@ package com.group10.API_ManageDormitory.service;
 import com.group10.API_ManageDormitory.dtos.request.ContractRequest;
 import com.group10.API_ManageDormitory.dtos.response.ContractResponse;
 import com.group10.API_ManageDormitory.entity.*;
-import com.group10.API_ManageDormitory.exception.AppException;
-import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.repository.ContractRepository;
 import com.group10.API_ManageDormitory.repository.ContractTenantRepository;
 import com.group10.API_ManageDormitory.repository.RoomRepository;

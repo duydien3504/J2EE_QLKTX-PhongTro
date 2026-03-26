@@ -5,6 +5,7 @@ import com.group10.API_ManageDormitory.dtos.response.IncidentResponse;
 import com.group10.API_ManageDormitory.entity.Incident;
 import com.group10.API_ManageDormitory.entity.Room;
 import com.group10.API_ManageDormitory.entity.Tenant;
+import com.group10.API_ManageDormitory.entity.User;
 import com.group10.API_ManageDormitory.exception.AppException;
 import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.repository.ContractTenantRepository;
@@ -27,14 +28,9 @@ public class IncidentService {
     private final TenantRepository tenantRepository;
     private final NotificationService notificationService;
     private final ContractTenantRepository contractTenantRepository;
+    private final AccessValidationService accessValidationService;
 
     public IncidentResponse createIncident(IncidentRequest request) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isTenant = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_TENANT") ||
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("TENANT");
-
         Room room = roomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
 
@@ -42,19 +38,18 @@ public class IncidentService {
                 .orElseThrow(() -> new AppException(ErrorCode.TENANT_NOT_FOUND));
 
         // Security: If tenant is reporting, validate they own the tenantId and occupy the room
-        if (isTenant && !isAdmin) {
-            Tenant requester = tenantRepository.findByUser_Username(username)
+        if (accessValidationService.isTenant() && !accessValidationService.isAdmin()) {
+            User currentUser = accessValidationService.getCurrentUser();
+            Tenant requester = tenantRepository.findByUser_Username(currentUser.getUsername())
                     .orElseThrow(() -> new AppException(ErrorCode.TENANT_NOT_FOUND));
             
             if (!requester.getTenantId().equals(reportedTenant.getTenantId())) {
                 throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
             }
 
-            // Verify the tenant is in an active contract for this room
-            boolean occupiesRoom = contractTenantRepository.findByTenant_TenantIdAndContract_IsDeletedFalse(requester.getTenantId())
-                    .stream()
-                    .anyMatch(ct -> ct.getContract().getRoom().getRoomId().equals(room.getRoomId()) && 
-                                   "ACTIVE".equalsIgnoreCase(ct.getContract().getContractStatus()));
+            // Optimized query for room occupation check
+            boolean occupiesRoom = contractTenantRepository.existsByTenant_TenantIdAndContract_Room_RoomIdAndContract_ContractStatusAndContract_IsDeletedFalse(
+                    requester.getTenantId(), room.getRoomId(), "ACTIVE");
             
             if (!occupiesRoom) {
                 throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
@@ -83,36 +78,34 @@ public class IncidentService {
     }
 
     public List<IncidentResponse> getAllIncidents() {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-
         List<Incident> incidents = incidentRepository.findAll();
 
+        if (accessValidationService.isAdmin()) {
+            return incidents.stream()
+                    .map(this::toIncidentResponse)
+                    .collect(Collectors.toList());
+        }
+
         return incidents.stream()
-                .filter(incident -> isAdmin || !isManageRole || isIncidentManagedBy(incident, username))
+                .filter(incident -> {
+                    try {
+                        accessValidationService.validateRoomAccess(incident.getRoom());
+                        return true;
+                    } catch (AppException e) {
+                        return false;
+                    }
+                })
                 .map(this::toIncidentResponse)
                 .collect(Collectors.toList());
     }
 
-    private boolean isIncidentManagedBy(Incident incident, String username) {
-        if (incident.getRoom() == null || incident.getRoom().getFloor() == null || incident.getRoom().getFloor().getBuilding() == null) {
-            return false;
-        }
-        com.group10.API_ManageDormitory.entity.Building b = incident.getRoom().getFloor().getBuilding();
-        return (b.getManager() != null && b.getManager().getUsername().equals(username)) ||
-               (b.getOwner() != null && b.getOwner().getUsername().equals(username));
-    }
+
 
     public IncidentResponse updateIncidentStatus(Integer incidentId, String status) {
         Incident incident = incidentRepository.findById(incidentId)
                 .orElseThrow(() -> new AppException(ErrorCode.INCIDENT_NOT_FOUND));
 
-        checkIncidentOwnership(incident);
+        accessValidationService.validateRoomAccess(incident.getRoom());
 
         incident.setStatus(status);
         Incident updatedIncident = incidentRepository.save(incident);
@@ -135,7 +128,7 @@ public class IncidentService {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         
-        checkRoomOwnership(room);
+        accessValidationService.validateRoomAccess(room);
 
         return incidentRepository.findByRoom_RoomId(roomId).stream()
                 .map(this::toIncidentResponse)
@@ -143,16 +136,9 @@ public class IncidentService {
     }
 
     public List<IncidentResponse> getIncidentsByTenant(Integer tenantId) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-
-        if (!isAdmin && !isManageRole && username != null) {
-            Tenant requester = tenantRepository.findByUser_Username(username)
+        if (!accessValidationService.isAdmin() && !accessValidationService.isManageRole()) {
+            User currentUser = accessValidationService.getCurrentUser();
+            Tenant requester = tenantRepository.findByUser_Username(currentUser.getUsername())
                     .orElseThrow(() -> new AppException(ErrorCode.TENANT_NOT_FOUND));
             if (!requester.getTenantId().equals(tenantId)) {
                 throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
@@ -164,45 +150,7 @@ public class IncidentService {
                 .collect(Collectors.toList());
     }
 
-    private void checkIncidentOwnership(Incident incident) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
 
-        if (isAdmin || !isManageRole || username == null) return;
-
-        if (!isIncidentManagedBy(incident, username)) {
-            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-    }
-
-    private void checkRoomOwnership(Room room) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-
-        if (isAdmin || !isManageRole || username == null) return;
-
-        if (room.getFloor() == null || room.getFloor().getBuilding() == null) {
-            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-        
-        com.group10.API_ManageDormitory.entity.Building b = room.getFloor().getBuilding();
-        boolean isManager = b.getManager() != null && b.getManager().getUsername().equals(username);
-        boolean isOwner = b.getOwner() != null && b.getOwner().getUsername().equals(username);
-        
-        if (!isManager && !isOwner) {
-            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-    }
 
     private IncidentResponse toIncidentResponse(Incident incident) {
         return IncidentResponse.builder()

@@ -30,24 +30,17 @@ public class BuildingService {
     private final UserRepository userRepository;
     private final RoomRepository roomRepository;
     private final ContractRepository contractRepository;
+    private final AccessValidationService accessValidationService;
 
     // Building CRUD
     public List<BuildingResponse> getAllBuildings() {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-
-        if (isAdmin || !isManageRole || username == null) {
+        if (accessValidationService.isAdmin() || !accessValidationService.isManageRole()) {
             return buildingRepository.findAll().stream()
                     .map(this::toBuildingResponse)
                     .collect(Collectors.toList());
         }
 
-        User requester = getRequester();
+        User requester = accessValidationService.getCurrentUser();
         // Return buildings where the user is either the manager OR the owner
         return buildingRepository.findByManager_UserIdOrOwner_UserId(requester.getUserId(), requester.getUserId()).stream()
                 .map(this::toBuildingResponse)
@@ -55,7 +48,7 @@ public class BuildingService {
     }
 
     public BuildingResponse createBuilding(BuildingRequest request) {
-        User requester = getRequester();
+        User requester = accessValidationService.getCurrentUser();
         Building building = Building.builder()
                 .buildingName(request.getBuildingName())
                 .address(request.getAddress())
@@ -79,7 +72,7 @@ public class BuildingService {
         Building building = buildingRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
 
-        validateBuildingAccess(building);
+        accessValidationService.validateBuildingAccess(building);
 
         if (request.getBuildingName() != null)
             building.setBuildingName(request.getBuildingName());
@@ -101,7 +94,7 @@ public class BuildingService {
         Building building = buildingRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
 
-        validateBuildingAccess(building);
+        accessValidationService.validateBuildingAccess(building);
 
         if (!floorRepository.findByBuilding(building).isEmpty()) {
             throw new RuntimeException("Cannot delete building with existing floors");
@@ -124,7 +117,7 @@ public class BuildingService {
         Building building = buildingRepository.findById(request.getBuildingId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
 
-        validateBuildingAccess(building);
+        accessValidationService.validateBuildingAccess(building);
 
         Floor floor = Floor.builder()
                 .floorName(request.getFloorName())
@@ -138,7 +131,7 @@ public class BuildingService {
         Floor floor = floorRepository.findById(floorId)
                 .orElseThrow(() -> new AppException(ErrorCode.FLOOR_NOT_FOUND));
 
-        validateBuildingAccess(floor.getBuilding());
+        accessValidationService.validateBuildingAccess(floor.getBuilding());
 
         if (roomRepository.existsByFloor_FloorId(floorId)) {
             throw new AppException(ErrorCode.FLOOR_IN_USE);
@@ -151,7 +144,7 @@ public class BuildingService {
         Floor floor = floorRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.FLOOR_NOT_FOUND));
 
-        validateBuildingAccess(floor.getBuilding());
+        accessValidationService.validateBuildingAccess(floor.getBuilding());
 
         if (request.getFloorName() != null)
             floor.setFloorName(request.getFloorName());
@@ -179,40 +172,12 @@ public class BuildingService {
                 Building b = buildingRepository.findById(bId)
                         .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
                 
-                validateBuildingAccess(b);
+                accessValidationService.validateBuildingAccess(b);
                 
                 // If it's a manager role, just update the manager. Creator stays owner.
                 b.setManager(manager);
                 buildingRepository.save(b);
             }
-        }
-    }
-
-    private User getRequester() {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-    }
-
-    private void validateBuildingAccess(Building building) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-        
-        if (isAdmin || !isManageRole || username == null) return;
-
-        User requester = getRequester();
-        Integer ownerId = building.getOwner() != null ? building.getOwner().getUserId() : building.getManager() != null ? building.getManager().getUserId() : null;
-        boolean isOwner = requester.getUserId().equals(ownerId);
-        boolean isManager = building.getManager() != null && building.getManager().getUserId().equals(requester.getUserId());
-        
-        if (!isOwner && !isManager) {
-            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
         }
     }
 
@@ -248,7 +213,7 @@ public class BuildingService {
         Floor floor = floorRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
 
-        validateBuildingAccess(floor.getBuilding());
+        accessValidationService.validateBuildingAccess(floor.getBuilding());
 
         List<Room> rooms = roomRepository.findByFloor_FloorId(id);
         

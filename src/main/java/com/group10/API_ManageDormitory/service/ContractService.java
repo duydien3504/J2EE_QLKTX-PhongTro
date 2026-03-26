@@ -40,22 +40,16 @@ public class ContractService {
     private final InvoiceRepository invoiceRepository;
     private final MoMoService moMoService;
     private final NotificationService notificationService;
+    private final AccessValidationService accessValidationService;
 
     @Transactional(readOnly = true)
     public List<ContractResponse> getContracts(String status) {
-        String username = SecurityUtils.getCurrentUsername();
-        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
-        User currentUser = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-
-        String role = currentUser.getRole() != null ? currentUser.getRole().getRoleName() : "";
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(role);
-
         return contractRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> {
                     // Security filter: Owners/Staff only see their own buildings
-                    if (!isAdmin) {
+                    if (!accessValidationService.isAdmin()) {
                         Building b = c.getRoom().getFloor().getBuilding();
+                        User currentUser = accessValidationService.getCurrentUser();
                         boolean isManager = b.getManager() != null && b.getManager().getUserId().equals(currentUser.getUserId());
                         boolean isOwner = b.getOwner() != null && b.getOwner().getUserId().equals(currentUser.getUserId());
                         if (!isManager && !isOwner) {
@@ -264,7 +258,7 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        checkContractAccess(contract);
+        accessValidationService.validateContractAccess(contract);
 
         if (request.getRentalPrice() != null)
             contract.setRentalPrice(request.getRentalPrice());
@@ -281,7 +275,7 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        checkContractAccess(contract);
+        accessValidationService.validateContractAccess(contract);
 
         Tenant tenant = tenantRepository.findById(request.getTenantId())
                 .orElseThrow(() -> new AppException(ErrorCode.TENANT_NOT_FOUND));
@@ -313,7 +307,7 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        checkContractAccess(contract);
+        accessValidationService.validateContractAccess(contract);
 
         // Nếu hợp đồng đang ACTIVE hoặc WAITING_DEPOSIT, giải phóng phòng
         if ("ACTIVE".equalsIgnoreCase(contract.getContractStatus()) || 
@@ -367,7 +361,7 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        checkContractAccess(contract);
+        accessValidationService.validateContractAccess(contract);
 
         List<ContractTenant> members = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contractId);
         ContractTenant target = members.stream()
@@ -387,7 +381,7 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        checkContractAccess(contract);
+        accessValidationService.validateContractAccess(contract);
 
         if (!"ACTIVE".equalsIgnoreCase(contract.getContractStatus())) {
             throw new RuntimeException("Contract is not ACTIVE");
@@ -426,39 +420,11 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
-        checkContractAccess(contract);
+        accessValidationService.validateContractAccess(contract);
 
         return toLiquidationResponse(contract);
     }
 
-    private void checkContractAccess(Contract contract) {
-        String username = SecurityUtils.getCurrentUsername();
-        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
-
-        User currentUser = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-
-        String role = currentUser.getRole() != null ? currentUser.getRole().getRoleName() : "";
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(role);
-
-        if (!isAdmin) {
-            if ("TENANT".equalsIgnoreCase(role)) {
-                // Check if tenant is in this contract
-                boolean isMember = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contract.getContractId())
-                        .stream().anyMatch(ct -> ct.getTenant().getUser() != null && 
-                                               ct.getTenant().getUser().getUserId().equals(currentUser.getUserId()));
-                if (!isMember) throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-            } else {
-                // For OWNER or STAFF, check building management
-                Building building = contract.getRoom().getFloor().getBuilding();
-                boolean isManager = building.getManager() != null && building.getManager().getUserId().equals(currentUser.getUserId());
-                boolean isOwner = building.getOwner() != null && building.getOwner().getUserId().equals(currentUser.getUserId());
-                if (!isManager && !isOwner) {
-                    throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-                }
-            }
-        }
-    }
 
     private LiquidationResponse toLiquidationResponse(Contract contract) {
         return LiquidationResponse.builder()

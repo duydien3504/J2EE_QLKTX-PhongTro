@@ -28,6 +28,7 @@ public class RoomService {
     private final RoomImageRepository roomImageRepository;
     private final ContractRepository contractRepository;
     private final CloudinaryService cloudinaryService;
+    private final AccessValidationService accessValidationService;
 
     // RoomType Operations
     public List<RoomTypeResponse> getAllRoomTypes() {
@@ -69,18 +70,27 @@ public class RoomService {
 
     // Room Operations
     public List<RoomResponse> getRooms(Integer floorId, String status, BigDecimal minPrice, BigDecimal maxPrice) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-
         List<Room> rooms = roomRepository.findAll();
 
+        if (accessValidationService.isAdmin()) {
+            return rooms.stream()
+                .filter(room -> floorId == null || room.getFloor().getFloorId().equals(floorId))
+                .filter(room -> status == null || status.trim().isEmpty() || (room.getCurrentStatus() != null && room.getCurrentStatus().equalsIgnoreCase(status)))
+                .filter(room -> minPrice == null || room.getRoomType().getBasePrice().compareTo(minPrice) >= 0)
+                .filter(room -> maxPrice == null || room.getRoomType().getBasePrice().compareTo(maxPrice) <= 0)
+                .map(this::toRoomResponse)
+                .collect(Collectors.toList());
+        }
+
         return rooms.stream()
-                .filter(room -> isAdmin || !isManageRole || isUserAssociatedWithRoom(room, username))
+                .filter(room -> {
+                    try {
+                        accessValidationService.validateRoomAccess(room);
+                        return true;
+                    } catch (AppException e) {
+                        return false;
+                    }
+                })
                 .filter(room -> floorId == null || room.getFloor().getFloorId().equals(floorId))
                 .filter(room -> status == null || status.trim().isEmpty()
                         || (room.getCurrentStatus() != null && room.getCurrentStatus().equalsIgnoreCase(status)))
@@ -90,24 +100,19 @@ public class RoomService {
                 .collect(Collectors.toList());
     }
 
-    private boolean isUserAssociatedWithRoom(Room room, String username) {
-        if (room.getFloor() == null || room.getFloor().getBuilding() == null) return false;
-        Building b = room.getFloor().getBuilding();
-        return (b.getManager() != null && b.getManager().getUsername().equals(username))
-            || (b.getOwner() != null && b.getOwner().getUsername().equals(username));
-    }
+
 
     public RoomResponse getRoomDetail(Integer id) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        checkRoomOwnership(room);
+        accessValidationService.validateRoomAccess(room);
         return toRoomResponse(room);
     }
 
     public RoomResponse createRoom(RoomRequest request) {
         Floor floor = floorRepository.findById(request.getFloorId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
-        checkFloorOwnership(floor);
+        accessValidationService.validateBuildingAccess(floor.getBuilding());
 
         RoomType roomType = roomTypeRepository.findById(request.getRoomTypeId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
@@ -127,7 +132,7 @@ public class RoomService {
     public RoomResponse updateRoom(Integer id, RoomRequest request) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        checkRoomOwnership(room);
+        accessValidationService.validateRoomAccess(room);
 
         if (request.getRoomNumber() != null)
             room.setRoomNumber(request.getRoomNumber());
@@ -137,7 +142,7 @@ public class RoomService {
         if (request.getFloorId() != null) {
             Floor floor = floorRepository.findById(request.getFloorId())
                     .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
-            checkFloorOwnership(floor);
+            accessValidationService.validateBuildingAccess(floor.getBuilding());
             room.setFloor(floor);
         }
 
@@ -153,7 +158,7 @@ public class RoomService {
     public RoomResponse updateRoomStatus(Integer id, String status) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        checkRoomOwnership(room);
+        accessValidationService.validateRoomAccess(room);
         room.setCurrentStatus(status);
         return toRoomResponse(roomRepository.save(room));
     }
@@ -161,7 +166,7 @@ public class RoomService {
     public void deleteRoom(Integer id) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        checkRoomOwnership(room);
+        accessValidationService.validateRoomAccess(room);
 
         if ("OCCUPIED".equalsIgnoreCase(room.getCurrentStatus())) {
             throw new AppException(ErrorCode.ROOM_OCCUPIED);
@@ -177,7 +182,7 @@ public class RoomService {
     public RoomResponse uploadRoomImages(Integer roomId, List<MultipartFile> images) throws IOException {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        checkRoomOwnership(room);
+        accessValidationService.validateRoomAccess(room);
 
         long currentImageCount = roomImageRepository.countByRoom_RoomId(roomId);
         if (currentImageCount + images.size() > RoomImageConstant.MAX_IMAGES_PER_ROOM) {
@@ -213,40 +218,7 @@ public class RoomService {
         return toRoomResponse(roomRepository.findById(roomId).orElseThrow());
     }
 
-    private void checkRoomOwnership(Room room) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-        
-        if (isAdmin || !isManageRole || username == null) return;
 
-        if (!isUserAssociatedWithRoom(room, username)) {
-            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-    }
-
-    private void checkFloorOwnership(Floor floor) {
-        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
-        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
-                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
-        boolean isManageRole = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_STAFF") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("OWNER") ||
-                              com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("STAFF");
-        
-        if (isAdmin || !isManageRole || username == null) return;
-
-        if (floor.getBuilding() == null || (
-            (floor.getBuilding().getManager() == null || !floor.getBuilding().getManager().getUsername().equals(username)) &&
-            (floor.getBuilding().getOwner() == null || !floor.getBuilding().getOwner().getUsername().equals(username))
-        )) {
-                throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-    }
 
     // Mappers
     private RoomTypeResponse toRoomTypeResponse(RoomType roomType) {

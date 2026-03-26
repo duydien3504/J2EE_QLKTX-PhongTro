@@ -25,12 +25,15 @@ public class MoMoService {
     private final ContractRepository contractRepository;
     private final ContractTenantRepository contractTenantRepository;
     private final NotificationService notificationService;
+    private final AccessValidationService accessValidationService;
     private Gson gson = new Gson();
     private OkHttpClient httpClient = new OkHttpClient();
 
     public MoMoResponse createPayment(Integer invoiceId) throws IOException {
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new RuntimeException("Invoice not found"));
+
+        accessValidationService.validateContractAccess(invoice.getContract());
 
         if ("PAID".equalsIgnoreCase(invoice.getPaymentStatus())) {
             throw new RuntimeException("Invoice already paid");
@@ -109,6 +112,22 @@ public class MoMoService {
 
     public MoMoResponse queryStatus(String orderId) throws IOException {
         System.out.println("Querying MoMo status for OrderId: " + orderId);
+        
+        // Extract invoiceId from orderId (Format: INV-invoiceId-timestamp)
+        try {
+            String[] parts = orderId.split("-");
+            if (parts.length >= 2) {
+                Integer invoiceId = Integer.parseInt(parts[1]);
+                Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
+                if (invoice != null) {
+                    accessValidationService.validateContractAccess(invoice.getContract());
+                }
+            }
+        } catch (Exception e) {
+            // If parsing fails, we still proceed to MoMo query but it will likely fail there too
+            System.err.println("Failed to validate access for orderId: " + orderId);
+        }
+
         String requestId = UUID.randomUUID().toString();
         String rawSignature = "accessKey=" + moMoConfig.getAccessKey() +
                 "&orderId=" + orderId +
