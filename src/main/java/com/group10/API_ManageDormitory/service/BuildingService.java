@@ -172,7 +172,9 @@ public class BuildingService {
                 Building b = buildingRepository.findById(bId)
                         .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
                 
-                accessValidationService.validateBuildingAccess(b);
+                if (!accessValidationService.hasBuildingAccess(b)) {
+                    throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+                }
                 
                 // If it's a manager role, just update the manager. Creator stays owner.
                 b.setManager(manager);

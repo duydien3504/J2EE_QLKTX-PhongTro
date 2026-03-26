@@ -40,50 +40,62 @@ public class AccessValidationService {
     }
 
     public void validateBuildingAccess(Building building) {
-        if (isAdmin()) return;
-        if (!isManageRole()) throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-
-        User currentUser = getCurrentUser();
-        boolean isOwner = building.getOwner() != null && building.getOwner().getUserId().equals(currentUser.getUserId());
-        boolean isManager = building.getManager() != null && building.getManager().getUserId().equals(currentUser.getUserId());
-
-        if (!isOwner && !isManager) {
+        if (!hasBuildingAccess(building)) {
             throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+        }
+    }
+
+    public boolean hasBuildingAccess(Building building) {
+        if (building == null) return false;
+        if (isAdmin()) return true;
+
+        try {
+            User currentUser = getCurrentUser();
+            boolean isOwner = building.getOwner() != null && building.getOwner().getUserId().equals(currentUser.getUserId());
+            boolean isManager = building.getManager() != null && building.getManager().getUserId().equals(currentUser.getUserId());
+            return isOwner || isManager;
+        } catch (AppException e) {
+            return false;
         }
     }
 
     public void validateRoomAccess(Room room) {
-        if (room == null || room.getFloor() == null || room.getFloor().getBuilding() == null) {
+        if (!hasRoomAccess(room)) {
             throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-        validateBuildingAccess(room.getFloor().getBuilding());
-    }
-
-    public void validateContractAccess(Contract contract) {
-        if (contract == null || contract.getRoom() == null) {
-            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        }
-
-        if (isAdmin()) return;
-
-        User currentUser = getCurrentUser();
-        if (SecurityUtils.hasRole("SCOPE_TENANT") || SecurityUtils.hasRole("TENANT")) {
-            boolean isMember = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contract.getContractId())
-                    .stream().anyMatch(ct -> ct.getTenant().getUser() != null && 
-                                           ct.getTenant().getUser().getUserId().equals(currentUser.getUserId()));
-            if (!isMember) throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
-        } else {
-            validateRoomAccess(contract.getRoom());
         }
     }
     
-    public void validateBuildingManagement(Building building, User currentUser) {
-        if (isAdmin()) return;
-        boolean isOwner = building.getOwner() != null && building.getOwner().getUserId().equals(currentUser.getUserId());
-        boolean isManager = building.getManager() != null && building.getManager().getUserId().equals(currentUser.getUserId());
+    public boolean hasRoomAccess(Room room) {
+        if (room == null || room.getFloor() == null || room.getFloor().getBuilding() == null) {
+            return false;
+        }
+        return hasBuildingAccess(room.getFloor().getBuilding());
+    }
 
-        if (!isOwner && !isManager) {
+    public void validateContractAccess(Contract contract) {
+        if (!hasContractAccess(contract)) {
             throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+        }
+    }
+
+    public boolean hasContractAccess(Contract contract) {
+        if (contract == null || contract.getRoom() == null) {
+            return false;
+        }
+
+        if (isAdmin()) return true;
+
+        try {
+            User currentUser = getCurrentUser();
+            if (isTenant()) {
+                return contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contract.getContractId())
+                        .stream().anyMatch(ct -> ct.getTenant().getUser() != null && 
+                                               ct.getTenant().getUser().getUserId().equals(currentUser.getUserId()));
+            } else {
+                return hasRoomAccess(contract.getRoom());
+            }
+        } catch (AppException e) {
+            return false;
         }
     }
 }

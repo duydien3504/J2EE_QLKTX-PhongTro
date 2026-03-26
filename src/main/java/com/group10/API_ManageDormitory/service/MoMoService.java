@@ -15,8 +15,14 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import com.group10.API_ManageDormitory.exception.AppException;
+import com.group10.API_ManageDormitory.exception.ErrorCode;
+
+import org.springframework.transaction.annotation.Transactional;
+
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class MoMoService {
 
     private final MoMoConfig moMoConfig;
@@ -111,64 +117,75 @@ public class MoMoService {
     }
 
     public MoMoResponse queryStatus(String orderId) throws IOException {
-        System.out.println("Querying MoMo status for OrderId: " + orderId);
-        
-        // Extract invoiceId from orderId (Format: INV-invoiceId-timestamp)
         try {
+            System.out.println("DEBUG: Querying MoMo status for OrderId: " + orderId);
+            
+            // Extract invoiceId from orderId (Format: INV-invoiceId-timestamp)
             String[] parts = orderId.split("-");
-            if (parts.length >= 2) {
-                Integer invoiceId = Integer.parseInt(parts[1]);
-                Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
-                if (invoice != null) {
-                    accessValidationService.validateContractAccess(invoice.getContract());
+            if (parts.length < 2) {
+                throw new AppException(ErrorCode.INVALID_INPUT);
+            }
+            Integer invoiceId = Integer.parseInt(parts[1]);
+            Invoice invoice = invoiceRepository.findById(invoiceId)
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+                    
+            if (!accessValidationService.hasContractAccess(invoice.getContract())) {
+                throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+            }
+
+            String requestId = UUID.randomUUID().toString();
+            String rawSignature = "accessKey=" + moMoConfig.getAccessKey() +
+                    "&orderId=" + orderId +
+                    "&partnerCode=" + moMoConfig.getPartnerCode() +
+                    "&requestId=" + requestId;
+
+            String signature = MoMoEncoder.signHmacSHA256(rawSignature, moMoConfig.getSecretKey());
+
+            MoMoRequest moMoRequest = MoMoRequest.builder()
+                    .partnerCode(moMoConfig.getPartnerCode())
+                    .requestId(requestId)
+                    .orderId(orderId)
+                    .signature(signature)
+                    .build();
+
+            RequestBody body = RequestBody.create(
+                    gson.toJson(moMoRequest),
+                    MediaType.get("application/json; charset=utf-8")
+            );
+
+            String endpoint = moMoConfig.getApiEndpoint();
+            if (!endpoint.endsWith("/query")) {
+                endpoint = endpoint.endsWith("/") ? endpoint + "query" : endpoint + "/query";
+            }
+
+            System.out.println("DEBUG: Sending request to MoMo endpoint: " + endpoint);
+            Request request = new Request.Builder()
+                    .url(endpoint)
+                    .post(body)
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                System.out.println("DEBUG MoMo Query Response body: " + responseBody);
+                
+                MoMoResponse moMoResponse = gson.fromJson(responseBody, MoMoResponse.class);
+                System.out.println("DEBUG MoMo Query Parsed ResultCode: " + (moMoResponse != null ? moMoResponse.getResultCode() : "NULL"));
+                
+                if (moMoResponse != null && moMoResponse.getResultCode() == 0) {
+                    System.out.println("DEBUG: ResultCode is 0, calling processIPN...");
+                    processIPN(responseBody);
+                } else {
+                    System.out.println("DEBUG: ResultCode is NOT 0 or moMoResponse is NULL. Logic skipped.");
                 }
+                
+                return moMoResponse;
             }
-        } catch (Exception e) {
-            // If parsing fails, we still proceed to MoMo query but it will likely fail there too
-            System.err.println("Failed to validate access for orderId: " + orderId);
-        }
-
-        String requestId = UUID.randomUUID().toString();
-        String rawSignature = "accessKey=" + moMoConfig.getAccessKey() +
-                "&orderId=" + orderId +
-                "&partnerCode=" + moMoConfig.getPartnerCode() +
-                "&requestId=" + requestId;
-
-        String signature = MoMoEncoder.signHmacSHA256(rawSignature, moMoConfig.getSecretKey());
-
-        MoMoRequest moMoRequest = MoMoRequest.builder()
-                .partnerCode(moMoConfig.getPartnerCode())
-                .requestId(requestId)
-                .orderId(orderId)
-                .signature(signature)
-                .build();
-
-        RequestBody body = RequestBody.create(
-                gson.toJson(moMoRequest),
-                MediaType.get("application/json; charset=utf-8")
-        );
-
-        String endpoint = moMoConfig.getApiEndpoint();
-        if (!endpoint.endsWith("/query")) {
-            endpoint = endpoint.endsWith("/") ? endpoint + "query" : endpoint + "/query";
-        }
-
-        Request request = new Request.Builder()
-                .url(endpoint)
-                .post(body)
-                .build();
-
-        try (Response response = httpClient.newCall(request).execute()) {
-            String responseBody = response.body() != null ? response.body().string() : "";
-            System.out.println("MoMo Query Response: " + responseBody);
-            MoMoResponse moMoResponse = gson.fromJson(responseBody, MoMoResponse.class);
-            
-            // Nếu query thấy thành công mà DB chưa cập nhật thì cập nhật luôn
-            if (moMoResponse != null && moMoResponse.getResultCode() == 0) {
-                processIPN(responseBody); // Tận dụng logic xử lý IPN để update DB
-            }
-            
-            return moMoResponse;
+        } catch (Throwable t) {
+            System.err.println("CRITICAL ERROR in queryStatus: " + t.getMessage());
+            t.printStackTrace();
+            if (t instanceof IOException) throw (IOException) t;
+            if (t instanceof AppException) throw (AppException) t;
+            throw new RuntimeException(t);
         }
     }
 
@@ -196,12 +213,14 @@ public class MoMoService {
                 Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
                 
                 if (invoice != null) {
-                    System.out.println("Updating Invoice #" + invoiceId + " to PAID");
-                    if (!"PAID".equalsIgnoreCase(invoice.getPaymentStatus())) {
-                        invoice.setPaymentStatus("PAID");
-                        invoice.setLastTransactionStatus("SUCCESS");
-                        invoice.setPaymentMethod("MoMo");
-                        invoiceRepository.save(invoice);
+                         System.out.println("DEBUG: Checking current status for Invoice #" + invoiceId + ": " + invoice.getPaymentStatus());
+                        if (!"PAID".equalsIgnoreCase(invoice.getPaymentStatus())) {
+                            invoice.setPaymentStatus("PAID");
+                            invoice.setLastTransactionStatus("SUCCESS");
+                            invoice.setPaymentMethod("MoMo");
+                            invoiceRepository.saveAndFlush(invoice);
+                            System.out.println("DEBUG: Invoice #" + invoiceId + " status UPDATED to PAID and Flushed.");
+                        System.out.println("DEBUG: Invoice #" + invoiceId + " successfully SAVED as PAID. Status check: " + invoice.getPaymentStatus());
 
                         // Cập nhật trạng thái hợp đồng nếu là hóa đơn cọc
                         Contract contract = invoice.getContract();

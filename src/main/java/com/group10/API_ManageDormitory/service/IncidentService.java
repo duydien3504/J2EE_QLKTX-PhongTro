@@ -87,14 +87,7 @@ public class IncidentService {
         }
 
         return incidents.stream()
-                .filter(incident -> {
-                    try {
-                        accessValidationService.validateRoomAccess(incident.getRoom());
-                        return true;
-                    } catch (AppException e) {
-                        return false;
-                    }
-                })
+                .filter(incident -> accessValidationService.hasRoomAccess(incident.getRoom()))
                 .map(this::toIncidentResponse)
                 .collect(Collectors.toList());
     }
