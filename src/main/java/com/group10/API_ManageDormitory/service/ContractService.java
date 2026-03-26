@@ -56,7 +56,9 @@ public class ContractService {
                     // Security filter: Owners/Staff only see their own buildings
                     if (!isAdmin) {
                         Building b = c.getRoom().getFloor().getBuilding();
-                        if (b.getManager() == null || !b.getManager().getUserId().equals(currentUser.getUserId())) {
+                        boolean isManager = b.getManager() != null && b.getManager().getUserId().equals(currentUser.getUserId());
+                        boolean isOwner = b.getOwner() != null && b.getOwner().getUserId().equals(currentUser.getUserId());
+                        if (!isManager && !isOwner) {
                             return false;
                         }
                     }
@@ -449,7 +451,9 @@ public class ContractService {
             } else {
                 // For OWNER or STAFF, check building management
                 Building building = contract.getRoom().getFloor().getBuilding();
-                if (building.getManager() == null || !building.getManager().getUserId().equals(currentUser.getUserId())) {
+                boolean isManager = building.getManager() != null && building.getManager().getUserId().equals(currentUser.getUserId());
+                boolean isOwner = building.getOwner() != null && building.getOwner().getUserId().equals(currentUser.getUserId());
+                if (!isManager && !isOwner) {
                     throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
                 }
             }

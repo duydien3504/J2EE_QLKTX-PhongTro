@@ -7,6 +7,7 @@ import com.group10.API_ManageDormitory.entity.Room;
 import com.group10.API_ManageDormitory.entity.Tenant;
 import com.group10.API_ManageDormitory.exception.AppException;
 import com.group10.API_ManageDormitory.exception.ErrorCode;
+import com.group10.API_ManageDormitory.repository.ContractTenantRepository;
 import com.group10.API_ManageDormitory.repository.IncidentRepository;
 import com.group10.API_ManageDormitory.repository.RoomRepository;
 import com.group10.API_ManageDormitory.repository.TenantRepository;
@@ -25,17 +26,44 @@ public class IncidentService {
     private final RoomRepository roomRepository;
     private final TenantRepository tenantRepository;
     private final NotificationService notificationService;
+    private final ContractTenantRepository contractTenantRepository;
 
     public IncidentResponse createIncident(IncidentRequest request) {
+        String username = com.group10.API_ManageDormitory.utils.SecurityUtils.getCurrentUsername();
+        boolean isAdmin = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_ADMIN") || 
+                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("ADMIN");
+        boolean isTenant = com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("SCOPE_TENANT") ||
+                         com.group10.API_ManageDormitory.utils.SecurityUtils.hasRole("TENANT");
+
         Room room = roomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
 
-        Tenant tenant = tenantRepository.findById(request.getTenantId())
+        Tenant reportedTenant = tenantRepository.findById(request.getTenantId())
                 .orElseThrow(() -> new AppException(ErrorCode.TENANT_NOT_FOUND));
+
+        // Security: If tenant is reporting, validate they own the tenantId and occupy the room
+        if (isTenant && !isAdmin) {
+            Tenant requester = tenantRepository.findByUser_Username(username)
+                    .orElseThrow(() -> new AppException(ErrorCode.TENANT_NOT_FOUND));
+            
+            if (!requester.getTenantId().equals(reportedTenant.getTenantId())) {
+                throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+            }
+
+            // Verify the tenant is in an active contract for this room
+            boolean occupiesRoom = contractTenantRepository.findByTenant_TenantIdAndContract_IsDeletedFalse(requester.getTenantId())
+                    .stream()
+                    .anyMatch(ct -> ct.getContract().getRoom().getRoomId().equals(room.getRoomId()) && 
+                                   "ACTIVE".equalsIgnoreCase(ct.getContract().getContractStatus()));
+            
+            if (!occupiesRoom) {
+                throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+            }
+        }
 
         Incident incident = Incident.builder()
                 .room(room)
-                .tenant(tenant)
+                .tenant(reportedTenant)
                 .description(request.getDescription())
                 .build();
 
@@ -45,7 +73,7 @@ public class IncidentService {
         if (room.getFloor() != null && room.getFloor().getBuilding() != null && room.getFloor().getBuilding().getManager() != null) {
             notificationService.createNotification(com.group10.API_ManageDormitory.dtos.request.NotificationRequest.builder()
                     .title("Báo cáo sự cố mới - Phòng " + room.getRoomNumber())
-                    .content("Người thuê " + tenant.getFullName() + " vừa báo cáo sự cố: " + request.getDescription())
+                    .content("Người thuê " + reportedTenant.getFullName() + " vừa báo cáo sự cố: " + request.getDescription())
                     .type("INCIDENT")
                     .userIds(java.util.List.of(room.getFloor().getBuilding().getManager().getUserId()))
                     .build());
@@ -72,11 +100,12 @@ public class IncidentService {
     }
 
     private boolean isIncidentManagedBy(Incident incident, String username) {
-        return incident.getRoom() != null && 
-               incident.getRoom().getFloor() != null && 
-               incident.getRoom().getFloor().getBuilding() != null && 
-               incident.getRoom().getFloor().getBuilding().getManager() != null && 
-               incident.getRoom().getFloor().getBuilding().getManager().getUsername().equals(username);
+        if (incident.getRoom() == null || incident.getRoom().getFloor() == null || incident.getRoom().getFloor().getBuilding() == null) {
+            return false;
+        }
+        com.group10.API_ManageDormitory.entity.Building b = incident.getRoom().getFloor().getBuilding();
+        return (b.getManager() != null && b.getManager().getUsername().equals(username)) ||
+               (b.getOwner() != null && b.getOwner().getUsername().equals(username));
     }
 
     public IncidentResponse updateIncidentStatus(Integer incidentId, String status) {
@@ -162,8 +191,15 @@ public class IncidentService {
 
         if (isAdmin || !isManageRole || username == null) return;
 
-        if (room.getFloor() == null || room.getFloor().getBuilding() == null || room.getFloor().getBuilding().getManager() == null ||
-            !room.getFloor().getBuilding().getManager().getUsername().equals(username)) {
+        if (room.getFloor() == null || room.getFloor().getBuilding() == null) {
+            throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+        }
+        
+        com.group10.API_ManageDormitory.entity.Building b = room.getFloor().getBuilding();
+        boolean isManager = b.getManager() != null && b.getManager().getUsername().equals(username);
+        boolean isOwner = b.getOwner() != null && b.getOwner().getUsername().equals(username);
+        
+        if (!isManager && !isOwner) {
             throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
         }
     }
