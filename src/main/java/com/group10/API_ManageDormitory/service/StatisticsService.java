@@ -110,7 +110,15 @@ public class StatisticsService {
         }
 
         long emptyRooms = totalRooms - rentedRooms;
-        long activeTenants = contractTenantRepository.countActiveTenants(buildingId);
+        long activeTenants;
+        if (buildingId != null) {
+            activeTenants = contractTenantRepository.countActiveTenants(buildingId);
+        } else if (isAdmin) {
+            activeTenants = contractTenantRepository.countActiveTenants(null);
+        } else {
+            // Aggregate for user (Owner + Manager) without double counting
+            activeTenants = contractTenantRepository.countActiveTenantsByUser(user.getUserId());
+        }
 
         return RoomStatusStatisticsResponse.builder()
                 .totalRooms(totalRooms)
@@ -123,6 +131,9 @@ public class StatisticsService {
     public RevenueDetailResponse getRevenueDetailByMonthAndYear(Integer month, Integer year) {
         BigDecimal rent = invoiceDetailRepository.getRentRevenueByMonthAndYear(month, year);
         BigDecimal service = invoiceDetailRepository.getServiceRevenueByMonthAndYear(month, year);
+        
+        if (rent == null) rent = BigDecimal.ZERO;
+        if (service == null) service = BigDecimal.ZERO;
         
         if (rent.compareTo(BigDecimal.ZERO) == 0 && service.compareTo(BigDecimal.ZERO) == 0) {
             BigDecimal total = invoiceRepository.getTotalRevenueByMonthAndYear(month, year, null);

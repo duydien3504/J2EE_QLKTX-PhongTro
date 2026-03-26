@@ -78,6 +78,15 @@ public class BuildingController {
                 .build();
     }
 
+    @DeleteMapping("/floors/{id}/completely")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
+    public ApiResponse<String> deleteFloorCompletely(@PathVariable Integer id) {
+        buildingService.deleteFloorCompletely(id);
+        return ApiResponse.<String>builder()
+                .result("Floor and all its rooms deleted successfully")
+                .build();
+    }
+
     @PutMapping("/floors/{id}")
     @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<FloorResponse> updateFloor(@PathVariable Integer id,

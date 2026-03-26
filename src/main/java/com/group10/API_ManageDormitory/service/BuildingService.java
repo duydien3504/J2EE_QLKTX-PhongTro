@@ -6,15 +6,18 @@ import com.group10.API_ManageDormitory.dtos.response.BuildingResponse;
 import com.group10.API_ManageDormitory.dtos.response.FloorResponse;
 import com.group10.API_ManageDormitory.entity.Building;
 import com.group10.API_ManageDormitory.entity.Floor;
+import com.group10.API_ManageDormitory.entity.Room;
 import com.group10.API_ManageDormitory.entity.User;
 import com.group10.API_ManageDormitory.exception.AppException;
 import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.repository.BuildingRepository;
+import com.group10.API_ManageDormitory.repository.ContractRepository;
 import com.group10.API_ManageDormitory.repository.FloorRepository;
 import com.group10.API_ManageDormitory.repository.RoomRepository;
 import com.group10.API_ManageDormitory.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -26,6 +29,7 @@ public class BuildingService {
     private final FloorRepository floorRepository;
     private final UserRepository userRepository;
     private final RoomRepository roomRepository;
+    private final ContractRepository contractRepository;
 
     // Building CRUD
     public List<BuildingResponse> getAllBuildings() {
@@ -174,6 +178,9 @@ public class BuildingService {
             for (Integer bId : buildingIds) {
                 Building b = buildingRepository.findById(bId)
                         .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+                
+                validateBuildingAccess(b);
+                
                 // If it's a manager role, just update the manager. Creator stays owner.
                 b.setManager(manager);
                 buildingRepository.save(b);
@@ -234,5 +241,32 @@ public class BuildingService {
                 .buildingId(floor.getBuilding().getBuildingId())
                 .buildingName(floor.getBuilding().getBuildingName())
                 .build();
+    }
+
+    @Transactional
+    public void deleteFloorCompletely(Integer id) {
+        Floor floor = floorRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        validateBuildingAccess(floor.getBuilding());
+
+        List<Room> rooms = roomRepository.findByFloor_FloorId(id);
+        
+        // Safety checks for all rooms
+        for (Room room : rooms) {
+            if ("OCCUPIED".equalsIgnoreCase(room.getCurrentStatus())) {
+                throw new AppException(ErrorCode.ROOM_OCCUPIED);
+            }
+            if (contractRepository.existsByRoom_RoomIdAndIsDeletedFalse(room.getRoomId())) {
+                throw new AppException(ErrorCode.ROOM_IN_USE);
+            }
+        }
+
+        // All rooms are safe to delete
+        for (Room room : rooms) {
+            roomRepository.delete(room);
+        }
+
+        floorRepository.delete(floor);
     }
 }

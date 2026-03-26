@@ -25,4 +25,18 @@ public interface ContractTenantRepository extends JpaRepository<ContractTenant, 
             "AND (ct.contract.endDate IS NULL OR ct.contract.endDate >= CURRENT_DATE) " +
             "AND (:buildingId IS NULL OR ct.contract.room.floor.building.buildingId = :buildingId)")
     long countActiveTenants(@org.springframework.data.repository.query.Param("buildingId") Integer buildingId);
+
+    @Query("SELECT COUNT(DISTINCT ct.tenant.tenantId) FROM ContractTenant ct " +
+            "WHERE ct.contract.contractStatus = 'ACTIVE' " +
+            "AND ct.contract.isDeleted = false " +
+            "AND (ct.contract.endDate IS NULL OR ct.contract.endDate >= CURRENT_DATE) " +
+            "AND ct.contract.room.floor.building.manager.userId = :managerId")
+    long countActiveTenantsByManager(@org.springframework.data.repository.query.Param("managerId") Integer managerId);
+
+    @Query("SELECT COUNT(DISTINCT ct.tenant.tenantId) FROM ContractTenant ct " +
+            "WHERE ct.contract.contractStatus = 'ACTIVE' " +
+            "AND ct.contract.isDeleted = false " +
+            "AND (ct.contract.endDate IS NULL OR ct.contract.endDate >= CURRENT_DATE) " +
+            "AND (ct.contract.room.floor.building.manager.userId = :userId OR ct.contract.room.floor.building.owner.userId = :userId)")
+    long countActiveTenantsByUser(@org.springframework.data.repository.query.Param("userId") Integer userId);
 }
