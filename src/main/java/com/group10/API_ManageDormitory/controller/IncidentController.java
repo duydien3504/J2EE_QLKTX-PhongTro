@@ -7,6 +7,7 @@ import com.group10.API_ManageDormitory.dtos.response.IncidentResponse;
 import com.group10.API_ManageDormitory.service.IncidentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +19,7 @@ public class IncidentController {
     private final IncidentService incidentService;
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF') or hasAuthority('SCOPE_TENANT')")
     public ApiResponse<IncidentResponse> createIncident(@RequestBody @Valid IncidentRequest request) {
         return ApiResponse.<IncidentResponse>builder()
                 .result(incidentService.createIncident(request))
@@ -25,6 +27,7 @@ public class IncidentController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<List<IncidentResponse>> getAllIncidents() {
         return ApiResponse.<List<IncidentResponse>>builder()
                 .result(incidentService.getAllIncidents())
@@ -32,6 +35,7 @@ public class IncidentController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<IncidentResponse> updateIncidentStatus(
             @PathVariable Integer id,
             @RequestBody @Valid IncidentStatusRequest request) {
@@ -41,6 +45,7 @@ public class IncidentController {
     }
 
     @GetMapping("/room/{roomId}")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<List<IncidentResponse>> getIncidentsByRoom(@PathVariable Integer roomId) {
         return ApiResponse.<List<IncidentResponse>>builder()
                 .result(incidentService.getIncidentsByRoom(roomId))
@@ -48,6 +53,7 @@ public class IncidentController {
     }
 
     @GetMapping("/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF') or hasAuthority('SCOPE_TENANT')")
     public ApiResponse<List<IncidentResponse>> getIncidentsByTenant(@PathVariable Integer tenantId) {
         return ApiResponse.<List<IncidentResponse>>builder()
                 .result(incidentService.getIncidentsByTenant(tenantId))

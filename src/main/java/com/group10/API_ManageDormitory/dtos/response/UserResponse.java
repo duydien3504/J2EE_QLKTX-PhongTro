@@ -16,5 +16,7 @@ public class UserResponse {
     private Boolean isActive;
     private LocalDateTime createdAt;
     private String roleName;
+    private Integer tenantId;
+    private java.util.List<String> managedBuildings;
     // Hide password and strict role handling
 }

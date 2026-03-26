@@ -2,14 +2,13 @@ package com.group10.API_ManageDormitory.controller;
 
 import com.group10.API_ManageDormitory.dtos.request.UserCreationRequest;
 import com.group10.API_ManageDormitory.dtos.response.ApiResponse;
+import com.group10.API_ManageDormitory.dtos.response.PageResponse;
 import com.group10.API_ManageDormitory.dtos.response.UserResponse;
 import com.group10.API_ManageDormitory.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -19,9 +18,14 @@ public class UserController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
-    public ApiResponse<List<UserResponse>> getUsers(@RequestParam(required = false) String role) {
-        return ApiResponse.<List<UserResponse>>builder()
-                .result(userService.getUsers(role))
+    public ApiResponse<PageResponse<UserResponse>> getUsers(
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.<PageResponse<UserResponse>>builder()
+                .result(userService.getUsers(role, search, page, size))
                 .build();
     }
 

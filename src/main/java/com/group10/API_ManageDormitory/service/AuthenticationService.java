@@ -14,6 +14,7 @@ import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.mapper.UserMapper;
 import com.group10.API_ManageDormitory.repository.UserRepository;
 import com.group10.API_ManageDormitory.repository.RoleRepository;
+import com.group10.API_ManageDormitory.repository.TenantRepository;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jwt.JWTClaimsSet;
@@ -32,6 +33,7 @@ import java.util.Date;
 public class AuthenticationService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final TenantRepository tenantRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
 
@@ -51,8 +53,9 @@ public class AuthenticationService {
         Role role = roleRepository.findByRoleName("Tenant")
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
         user.setRole(role);
+        User savedUser = userRepository.save(user);
 
-        return userMapper.toUserResponse(userRepository.save(user));
+        return userMapper.toUserResponse(savedUser, null);
     }
 
     public AuthenticationResponse login(LoginRequest request) {
@@ -93,8 +96,11 @@ public class AuthenticationService {
         String name = context.getAuthentication().getName();
 
         User user = userRepository.findByUsername(name).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        
+        Integer tenantId = tenantRepository.findByUser_UserId(user.getUserId())
+                .map(t -> t.getTenantId()).orElse(null);
 
-        return userMapper.toUserResponse(user);
+        return userMapper.toUserResponse(user, tenantId);
     }
 
     public UserResponse updateProfile(UpdateProfileRequest request) {
@@ -111,7 +117,11 @@ public class AuthenticationService {
         }
         // Avatar column missing in Entity. Skipping avatar for now.
 
-        return userMapper.toUserResponse(userRepository.save(user));
+        User savedUser = userRepository.save(user);
+        Integer tenantId = tenantRepository.findByUser_UserId(savedUser.getUserId())
+                .map(t -> t.getTenantId()).orElse(null);
+
+        return userMapper.toUserResponse(savedUser, tenantId);
     }
 
     private String generateToken(User user) {

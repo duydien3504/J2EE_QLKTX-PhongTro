@@ -88,7 +88,7 @@ public class ContractController {
     }
 
     @PostMapping("/{id}/terminate")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<com.group10.API_ManageDormitory.dtos.response.LiquidationResponse> terminateContract(
             @PathVariable Integer id,
             @RequestBody @Valid com.group10.API_ManageDormitory.dtos.request.TerminateRequest request) {
@@ -98,7 +98,7 @@ public class ContractController {
     }
 
     @GetMapping("/{id}/liquidation")
-    @PreAuthorize("hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_TENANT')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF') or hasAuthority('SCOPE_TENANT')")
     public ApiResponse<com.group10.API_ManageDormitory.dtos.response.LiquidationResponse> getLiquidation(
             @PathVariable Integer id) {
         return ApiResponse.<com.group10.API_ManageDormitory.dtos.response.LiquidationResponse>builder()

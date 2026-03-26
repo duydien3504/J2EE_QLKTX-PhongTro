@@ -13,4 +13,6 @@ import java.math.BigDecimal;
 public class TerminateRequest {
     private BigDecimal deductionAmount;
     private String deductionReason;
+    private BigDecimal finalElectricityReading;
+    private BigDecimal finalWaterReading;
 }

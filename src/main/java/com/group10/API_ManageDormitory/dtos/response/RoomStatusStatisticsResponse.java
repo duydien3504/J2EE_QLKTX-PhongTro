@@ -13,4 +13,5 @@ public class RoomStatusStatisticsResponse {
     private long emptyRooms;
     private long rentedRooms;
     private long totalRooms;
+    private long activeTenants;
 }

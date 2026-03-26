@@ -12,5 +12,9 @@ public interface RoomAssetRepository extends JpaRepository<RoomAsset, Integer> {
 
     // O(1) - DB-level EXISTS check, no full table scan
     boolean existsByAsset_AssetId(Integer assetId);
+
+    void deleteByRoom_Floor_Building_BuildingIdAndAsset_AssetId(Integer buildingId, Integer assetId);
+
+    void deleteByRoom_Floor_Building_BuildingIdAndAsset_AssetIdAndRoom_RoomType_RoomTypeId(Integer buildingId, Integer assetId, Integer roomTypeId);
 }
 

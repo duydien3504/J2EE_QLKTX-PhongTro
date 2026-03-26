@@ -1,6 +1,7 @@
 package com.group10.API_ManageDormitory.controller;
 
 import com.group10.API_ManageDormitory.dtos.request.AssetRequest;
+import com.group10.API_ManageDormitory.dtos.request.BulkRoomAssetRequest;
 import com.group10.API_ManageDormitory.dtos.request.RoomAssetRequest;
 import com.group10.API_ManageDormitory.dtos.response.ApiResponse;
 import com.group10.API_ManageDormitory.dtos.response.AssetResponse;
@@ -36,6 +37,14 @@ public class AssetController {
                 .build();
     }
 
+    @PutMapping("/assets/{id}")
+    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    public ApiResponse<AssetResponse> updateAsset(@PathVariable Integer id, @RequestBody @Valid AssetRequest request) {
+        return ApiResponse.<AssetResponse>builder()
+                .result(assetService.updateAsset(id, request))
+                .build();
+    }
+
     @DeleteMapping("/assets/{id}")
     @PreAuthorize("hasAuthority('SCOPE_OWNER')")
     public ApiResponse<String> deleteAsset(@PathVariable Integer id) {
@@ -58,6 +67,24 @@ public class AssetController {
     public ApiResponse<RoomAssetResponse> assignAssetToRoom(@RequestBody @Valid RoomAssetRequest request) {
         return ApiResponse.<RoomAssetResponse>builder()
                 .result(assetService.assignAssetToRoom(request))
+                .build();
+    }
+
+    @PostMapping("/room-assets/bulk")
+    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    public ApiResponse<String> bulkAssignAssets(@RequestBody @Valid BulkRoomAssetRequest request) {
+        assetService.bulkAssignAssets(request);
+        return ApiResponse.<String>builder()
+                .result("Assets assigned to rooms successfully")
+                .build();
+    }
+
+    @DeleteMapping("/room-assets/bulk")
+    @PreAuthorize("hasAuthority('SCOPE_OWNER')")
+    public ApiResponse<String> bulkRemoveAssets(@RequestBody @Valid BulkRoomAssetRequest request) {
+        assetService.bulkRemoveAssets(request);
+        return ApiResponse.<String>builder()
+                .result("Assets removed from rooms successfully")
                 .build();
     }
 

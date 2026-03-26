@@ -1,6 +1,7 @@
 package com.group10.API_ManageDormitory.service;
 
 import com.group10.API_ManageDormitory.dtos.request.AssetRequest;
+import com.group10.API_ManageDormitory.dtos.request.BulkRoomAssetRequest;
 import com.group10.API_ManageDormitory.dtos.request.RoomAssetRequest;
 import com.group10.API_ManageDormitory.dtos.response.AssetResponse;
 import com.group10.API_ManageDormitory.dtos.response.RoomAssetResponse;
@@ -14,6 +15,7 @@ import com.group10.API_ManageDormitory.repository.RoomAssetRepository;
 import com.group10.API_ManageDormitory.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -40,6 +42,22 @@ public class AssetService {
                 .purchasePrice(request.getPurchasePrice())
                 .purchaseDate(request.getPurchaseDate() != null ? request.getPurchaseDate() : LocalDate.now())
                 .build();
+        return toAssetResponse(assetRepository.save(asset));
+    }
+
+    public AssetResponse updateAsset(Integer assetId, AssetRequest request) {
+        Asset asset = assetRepository.findById(assetId)
+                .orElseThrow(() -> new AppException(ErrorCode.ASSET_NOT_FOUND));
+
+        if (request.getAssetName() != null)
+            asset.setAssetName(request.getAssetName());
+        if (request.getAssetCode() != null)
+            asset.setAssetCode(request.getAssetCode());
+        if (request.getPurchasePrice() != null)
+            asset.setPurchasePrice(request.getPurchasePrice());
+        if (request.getPurchaseDate() != null)
+            asset.setPurchaseDate(request.getPurchaseDate());
+
         return toAssetResponse(assetRepository.save(asset));
     }
 
@@ -96,6 +114,41 @@ public class AssetService {
             roomAsset.setConditionStatus(request.getConditionStatus());
 
         return toRoomAssetResponse(roomAssetRepository.save(roomAsset));
+    }
+
+    @Transactional
+    public void bulkAssignAssets(BulkRoomAssetRequest request) {
+        List<Room> rooms;
+        if (request.getRoomTypeId() != null) {
+            rooms = roomRepository.findByFloor_Building_BuildingIdAndRoomType_RoomTypeId(
+                    request.getBuildingId(), request.getRoomTypeId());
+        } else {
+            rooms = roomRepository.findByFloor_Building_BuildingId(request.getBuildingId());
+        }
+
+        Asset asset = assetRepository.findById(request.getAssetId())
+                .orElseThrow(() -> new AppException(ErrorCode.ASSET_NOT_FOUND));
+
+        for (Room room : rooms) {
+            RoomAsset roomAsset = RoomAsset.builder()
+                    .room(room)
+                    .asset(asset)
+                    .quantity(request.getQuantity())
+                    .conditionStatus(request.getConditionStatus() != null ? request.getConditionStatus() : "GOOD")
+                    .build();
+            roomAssetRepository.save(roomAsset);
+        }
+    }
+
+    @Transactional
+    public void bulkRemoveAssets(BulkRoomAssetRequest request) {
+        if (request.getRoomTypeId() != null) {
+            roomAssetRepository.deleteByRoom_Floor_Building_BuildingIdAndAsset_AssetIdAndRoom_RoomType_RoomTypeId(
+                    request.getBuildingId(), request.getAssetId(), request.getRoomTypeId());
+        } else {
+            roomAssetRepository.deleteByRoom_Floor_Building_BuildingIdAndAsset_AssetId(
+                    request.getBuildingId(), request.getAssetId());
+        }
     }
 
     public void removeRoomAsset(Integer id) {

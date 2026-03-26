@@ -15,5 +15,7 @@ public class BuildingResponse {
     private String address;
     private Integer managerId;
     private String managerName;
+    private Integer ownerId;
+    private String ownerName;
     private Integer totalFloors;
 }

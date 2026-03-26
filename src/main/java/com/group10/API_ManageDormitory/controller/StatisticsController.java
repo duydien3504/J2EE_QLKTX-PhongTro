@@ -3,6 +3,7 @@ package com.group10.API_ManageDormitory.controller;
 import com.group10.API_ManageDormitory.dtos.response.*;
 import com.group10.API_ManageDormitory.service.StatisticsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,22 +14,25 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/statistics")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
 public class StatisticsController {
     private final StatisticsService statisticsService;
 
     @GetMapping("/revenue")
     public ApiResponse<RevenueMonthResponse> getRevenue(
             @RequestParam Integer month,
-            @RequestParam Integer year) {
+            @RequestParam Integer year,
+            @RequestParam(required = false) Integer buildingId) {
         return ApiResponse.<RevenueMonthResponse>builder()
-                .result(statisticsService.getRevenueByMonthAndYear(month, year))
+                .result(statisticsService.getRevenueByMonthAndYear(month, year, buildingId))
                 .build();
     }
 
     @GetMapping("/rooms")
-    public ApiResponse<RoomStatusStatisticsResponse> getRoomStatus() {
+    public ApiResponse<RoomStatusStatisticsResponse> getRoomStatus(
+            @RequestParam(required = false) Integer buildingId) {
         return ApiResponse.<RoomStatusStatisticsResponse>builder()
-                .result(statisticsService.getRoomStatusStatistics())
+                .result(statisticsService.getRoomStatusStatistics(buildingId))
                 .build();
     }
 

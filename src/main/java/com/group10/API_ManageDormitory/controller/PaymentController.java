@@ -26,4 +26,10 @@ public class PaymentController {
         moMoService.processIPN(body);
         return ResponseEntity.ok().build();
     }
+
+    @GetMapping("/query/{orderId}")
+    public ResponseEntity<MoMoResponse> queryStatus(@PathVariable String orderId) throws IOException {
+        MoMoResponse response = moMoService.queryStatus(orderId);
+        return ResponseEntity.ok(response);
+    }
 }

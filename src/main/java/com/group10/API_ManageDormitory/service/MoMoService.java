@@ -2,12 +2,8 @@ package com.group10.API_ManageDormitory.service;
 
 import com.google.gson.Gson;
 import com.group10.API_ManageDormitory.config.MoMoConfig;
-import com.group10.API_ManageDormitory.entity.Contract;
-import com.group10.API_ManageDormitory.entity.Invoice;
-import com.group10.API_ManageDormitory.entity.Payment;
-import com.group10.API_ManageDormitory.repository.ContractRepository;
-import com.group10.API_ManageDormitory.repository.InvoiceRepository;
-import com.group10.API_ManageDormitory.repository.PaymentRepository;
+import com.group10.API_ManageDormitory.entity.*;
+import com.group10.API_ManageDormitory.repository.*;
 import com.group10.API_ManageDormitory.utils.momo.MoMoEncoder;
 import com.group10.API_ManageDormitory.utils.momo.MoMoRequest;
 import com.group10.API_ManageDormitory.utils.momo.MoMoResponse;
@@ -27,8 +23,10 @@ public class MoMoService {
     private final InvoiceRepository invoiceRepository;
     private final PaymentRepository paymentRepository;
     private final ContractRepository contractRepository;
-    private final Gson gson = new Gson();
-    private final OkHttpClient httpClient = new OkHttpClient();
+    private final ContractTenantRepository contractTenantRepository;
+    private final NotificationService notificationService;
+    private Gson gson = new Gson();
+    private OkHttpClient httpClient = new OkHttpClient();
 
     public MoMoResponse createPayment(Integer invoiceId) throws IOException {
         Invoice invoice = invoiceRepository.findById(invoiceId)
@@ -110,6 +108,7 @@ public class MoMoService {
     }
 
     public MoMoResponse queryStatus(String orderId) throws IOException {
+        System.out.println("Querying MoMo status for OrderId: " + orderId);
         String requestId = UUID.randomUUID().toString();
         String rawSignature = "accessKey=" + moMoConfig.getAccessKey() +
                 "&orderId=" + orderId +
@@ -142,34 +141,55 @@ public class MoMoService {
 
         try (Response response = httpClient.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
-            return gson.fromJson(responseBody, MoMoResponse.class);
+            System.out.println("MoMo Query Response: " + responseBody);
+            MoMoResponse moMoResponse = gson.fromJson(responseBody, MoMoResponse.class);
+            
+            // Nếu query thấy thành công mà DB chưa cập nhật thì cập nhật luôn
+            if (moMoResponse != null && moMoResponse.getResultCode() == 0) {
+                processIPN(responseBody); // Tận dụng logic xử lý IPN để update DB
+            }
+            
+            return moMoResponse;
         }
     }
 
     public void processIPN(String body) {
-        MoMoResponse response = gson.fromJson(body, MoMoResponse.class);
+        System.out.println("MoMo IPN Received: " + body);
+        try {
+            MoMoResponse response = gson.fromJson(body, MoMoResponse.class);
 
-        // In a real scenario, you MUST verify the signature from MoMo here
-        // For simplicity and demo purposes, we'll assume it's valid if resultCode is 0
+            if (response == null) {
+                System.out.println("MoMo IPN Error: Response body is null");
+                return;
+            }
 
-        if (response.getResultCode() == 0) {
-            String orderId = response.getOrderId(); // Format: INV-invoiceId-timestamp
-            Integer invoiceId = Integer.parseInt(orderId.split("-")[1]);
-
-            Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
-            if (invoice != null) {
-                if (response.getResultCode() == 0) {
+            if (response.getResultCode() == 0) {
+                String orderId = response.getOrderId(); // Format: INV-invoiceId-timestamp
+                System.out.println("Processing successful payment for OrderId: " + orderId);
+                
+                String[] parts = orderId.split("-");
+                if (parts.length < 2) {
+                    System.out.println("MoMo IPN Error: Invalid OrderId format: " + orderId);
+                    return;
+                }
+                
+                Integer invoiceId = Integer.parseInt(parts[1]);
+                Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
+                
+                if (invoice != null) {
+                    System.out.println("Updating Invoice #" + invoiceId + " to PAID");
                     if (!"PAID".equalsIgnoreCase(invoice.getPaymentStatus())) {
                         invoice.setPaymentStatus("PAID");
                         invoice.setLastTransactionStatus("SUCCESS");
                         invoice.setPaymentMethod("MoMo");
                         invoiceRepository.save(invoice);
 
-                        // Cập nhật trạng thái hợp đồng nếu là hóa đơn cọc và đã thanh toán
+                        // Cập nhật trạng thái hợp đồng nếu là hóa đơn cọc
                         Contract contract = invoice.getContract();
                         if (contract != null && "WAITING_DEPOSIT".equalsIgnoreCase(contract.getContractStatus())) {
                             contract.setContractStatus("ACTIVE");
                             contractRepository.save(contract);
+                            System.out.println("Contract Status updated to ACTIVE");
                         }
 
                         Payment payment = Payment.builder()
@@ -177,15 +197,54 @@ public class MoMoService {
                                 .paymentDate(LocalDateTime.now())
                                 .amountPaid(invoice.getTotalAmount())
                                 .paymentMethod("MoMo")
-                                .transactionCode(response.getRequestId())
+                                .transactionCode(response.getTransId() != null ? response.getTransId().toString() : response.getRequestId())
                                 .build();
                         paymentRepository.save(payment);
+                        System.out.println("Payment record created successfully");
+
+                        // Notify Tenant and Manager
+                        if (invoice.getContract() != null && invoice.getContract().getRoom() != null) {
+                            String roomNum = invoice.getContract().getRoom().getRoomNumber();
+                            String amountStr = new java.text.DecimalFormat("#,###").format(invoice.getTotalAmount());
+                            
+                            // 1. Notify Tenants
+                            java.util.List<ContractTenant> members = 
+                                contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(invoice.getContract().getContractId());
+                            
+                            members.forEach(m -> {
+                                if (m.getTenant() != null && m.getTenant().getUser() != null) {
+                                    notificationService.createNotification(com.group10.API_ManageDormitory.dtos.request.NotificationRequest.builder()
+                                            .title("Thanh toán thành công - Phòng " + roomNum)
+                                            .content("Hệ thống đã nhận được số tiền " + amountStr + " VNĐ cho hóa đơn tháng " + invoice.getMonth() + "/" + invoice.getYear() + ". Cảm ơn bạn!")
+                                            .type("PAYMENT")
+                                            .userIds(java.util.List.of(m.getTenant().getUser().getUserId()))
+                                            .build());
+                                }
+                            });
+
+                            // 2. Notify Building Manager
+                            User manager = invoice.getContract().getRoom().getFloor().getBuilding().getManager();
+                            if (manager != null) {
+                                notificationService.createNotification(com.group10.API_ManageDormitory.dtos.request.NotificationRequest.builder()
+                                        .title("Thông báo thanh toán - Phòng " + roomNum)
+                                        .content("Phòng " + roomNum + " vừa thanh toán hóa đơn tháng " + invoice.getMonth() + "/" + invoice.getYear() + " (Số tiền: " + amountStr + " VNĐ).")
+                                        .type("PAYMENT")
+                                        .userIds(java.util.List.of(manager.getUserId()))
+                                        .build());
+                            }
+                        }
+                    } else {
+                        System.out.println("Invoice #" + invoiceId + " was already marked as PAID");
                     }
                 } else {
-                    invoice.setLastTransactionStatus("FAILED");
-                    invoiceRepository.save(invoice);
+                    System.out.println("MoMo IPN Error: Invoice not found for ID: " + invoiceId);
                 }
+            } else {
+                System.out.println("MoMo Payment Failed or Cancelled. ResultCode: " + response.getResultCode());
             }
+        } catch (Exception e) {
+            System.err.println("Error processing MoMo IPN: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

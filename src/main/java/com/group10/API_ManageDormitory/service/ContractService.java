@@ -39,12 +39,28 @@ public class ContractService {
     private final UserRepository userRepository;
     private final InvoiceRepository invoiceRepository;
     private final MoMoService moMoService;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public List<ContractResponse> getContracts(String status) {
-        // Simple filtering in stream
+        String username = SecurityUtils.getCurrentUsername();
+        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
+        User currentUser = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        String role = currentUser.getRole() != null ? currentUser.getRole().getRoleName() : "";
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(role);
+
         return contractRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> {
+                    // Security filter: Owners/Staff only see their own buildings
+                    if (!isAdmin) {
+                        Building b = c.getRoom().getFloor().getBuilding();
+                        if (b.getManager() == null || !b.getManager().getUserId().equals(currentUser.getUserId())) {
+                            return false;
+                        }
+                    }
+
                     if (status == null || status.isEmpty())
                         return true;
                     if ("EXPIRED".equalsIgnoreCase(status)) {
@@ -96,6 +112,16 @@ public class ContractService {
                 .isRepresentative(true)
                 .build();
         contractTenantRepository.save(link);
+
+        // Notify Tenant about new contract
+        if (tenant.getUser() != null) {
+            notificationService.createNotification(com.group10.API_ManageDormitory.dtos.request.NotificationRequest.builder()
+                    .title("Hợp động thuê phòng mới - " + room.getRoomNumber())
+                    .content("Hệ thống đã tạo hợp đồng thuê phòng cho bạn. Vui lòng kiểm tra chi tiết trong phần Hợp đồng.")
+                    .type("CONTRACT")
+                    .userIds(java.util.List.of(tenant.getUser().getUserId()))
+                    .build());
+        }
 
         room.setCurrentStatus("OCCUPIED");
         roomRepository.save(room);
@@ -165,6 +191,16 @@ public class ContractService {
 
         depositInvoice = invoiceRepository.save(depositInvoice);
 
+        // Notify Tenant about registration success
+        if (user != null) {
+            notificationService.createNotification(com.group10.API_ManageDormitory.dtos.request.NotificationRequest.builder()
+                    .title("Đăng ký thuê phòng thành công")
+                    .content("Bạn đã đăng ký thuê phòng " + room.getRoomNumber() + " thành công. Vui lòng hoàn tất thanh toán tiền cọc để giữ phòng.")
+                    .type("REGISTRATION")
+                    .userIds(java.util.List.of(user.getUserId()))
+                    .build());
+        }
+
         // If MoMo, generate payUrl
         String payUrl = null;
         if ("MOMO".equalsIgnoreCase(request.getPaymentMethod())) {
@@ -226,6 +262,8 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
+        checkContractAccess(contract);
+
         if (request.getRentalPrice() != null)
             contract.setRentalPrice(request.getRentalPrice());
         if (request.getEndDate() != null)
@@ -240,6 +278,8 @@ public class ContractService {
     public ContractResponse addMember(Integer contractId, MemberRequest request) {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+        checkContractAccess(contract);
 
         Tenant tenant = tenantRepository.findById(request.getTenantId())
                 .orElseThrow(() -> new AppException(ErrorCode.TENANT_NOT_FOUND));
@@ -270,6 +310,8 @@ public class ContractService {
     public void deleteContract(Integer id) {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+        checkContractAccess(contract);
 
         // Nếu hợp đồng đang ACTIVE hoặc WAITING_DEPOSIT, giải phóng phòng
         if ("ACTIVE".equalsIgnoreCase(contract.getContractStatus()) || 
@@ -320,6 +362,11 @@ public class ContractService {
 
     @Transactional
     public void removeMember(Integer contractId, Integer tenantId) {
+        Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(contractId)
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+        checkContractAccess(contract);
+
         List<ContractTenant> members = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contractId);
         ContractTenant target = members.stream()
                 .filter(m -> m.getTenant().getTenantId().equals(tenantId))
@@ -338,6 +385,8 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
+        checkContractAccess(contract);
+
         if (!"ACTIVE".equalsIgnoreCase(contract.getContractStatus())) {
             throw new RuntimeException("Contract is not ACTIVE");
         }
@@ -345,10 +394,12 @@ public class ContractService {
         BigDecimal deduction = request.getDeductionAmount() != null ? request.getDeductionAmount() : BigDecimal.ZERO;
         BigDecimal deposit = contract.getDepositAmount() != null ? contract.getDepositAmount() : BigDecimal.ZERO;
 
-        if (deduction.compareTo(deposit) > 0) {
-            throw new RuntimeException("Deduction amount cannot exceed deposit amount");
+        if (deduction.compareTo(BigDecimal.ZERO) > 0 && 
+            (request.getDeductionReason() == null || request.getDeductionReason().isBlank())) {
+            throw new AppException(ErrorCode.DEDUCTION_REASON_REQUIRED);
         }
 
+        // Allowing deduction > deposit for large debts/damages
         BigDecimal refund = deposit.subtract(deduction);
 
         contract.setContractStatus("TERMINATED");
@@ -356,6 +407,8 @@ public class ContractService {
         contract.setDeductionAmount(deduction);
         contract.setRefundAmount(refund);
         contract.setDeductionReason(request.getDeductionReason());
+        contract.setFinalElectricityReading(request.getFinalElectricityReading());
+        contract.setFinalWaterReading(request.getFinalWaterReading());
 
         contractRepository.save(contract);
 
@@ -371,7 +424,36 @@ public class ContractService {
         Contract contract = contractRepository.findByContractIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
 
+        checkContractAccess(contract);
+
         return toLiquidationResponse(contract);
+    }
+
+    private void checkContractAccess(Contract contract) {
+        String username = SecurityUtils.getCurrentUsername();
+        if (username == null) throw new AppException(ErrorCode.UNAUTHENTICATED);
+
+        User currentUser = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        String role = currentUser.getRole() != null ? currentUser.getRole().getRoleName() : "";
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(role);
+
+        if (!isAdmin) {
+            if ("TENANT".equalsIgnoreCase(role)) {
+                // Check if tenant is in this contract
+                boolean isMember = contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(contract.getContractId())
+                        .stream().anyMatch(ct -> ct.getTenant().getUser() != null && 
+                                               ct.getTenant().getUser().getUserId().equals(currentUser.getUserId()));
+                if (!isMember) throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+            } else {
+                // For OWNER or STAFF, check building management
+                Building building = contract.getRoom().getFloor().getBuilding();
+                if (building.getManager() == null || !building.getManager().getUserId().equals(currentUser.getUserId())) {
+                    throw new AppException(ErrorCode.ACCESS_DENIED_TO_RESOURCE);
+                }
+            }
+        }
     }
 
     private LiquidationResponse toLiquidationResponse(Contract contract) {
@@ -383,6 +465,8 @@ public class ContractService {
                 .refundAmount(contract.getRefundAmount())
                 .deductionReason(contract.getDeductionReason())
                 .contractStatus(contract.getContractStatus())
+                .finalElectricityReading(contract.getFinalElectricityReading())
+                .finalWaterReading(contract.getFinalWaterReading())
                 .build();
     }
 

@@ -19,4 +19,6 @@ public class LiquidationResponse {
     private BigDecimal refundAmount;
     private String deductionReason;
     private String contractStatus;
+    private BigDecimal finalElectricityReading;
+    private BigDecimal finalWaterReading;
 }
