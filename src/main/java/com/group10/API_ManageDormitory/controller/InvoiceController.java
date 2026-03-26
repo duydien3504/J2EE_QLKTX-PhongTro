@@ -21,10 +21,15 @@ public class InvoiceController {
     @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<PageResponse<InvoiceResponse>> getAllInvoices(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer buildingId,
+            @RequestParam(required = false) String roomNumber
     ){
         return ApiResponse.<PageResponse<InvoiceResponse>>builder()
-                .result(invoiceService.getAllInvoices(page, size))
+                .result(invoiceService.getAllInvoices(page, size, month, year, status, buildingId, roomNumber))
                 .build();
     }
 

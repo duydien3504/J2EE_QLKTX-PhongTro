@@ -35,10 +35,18 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
             "LEFT JOIN f.building b " +
             "LEFT JOIN b.manager m " +
             "LEFT JOIN b.owner o " +
-            "WHERE :isAdmin = true " +
-            "OR m.username = :username " +
-            "OR o.username = :username")
+            "WHERE (:isAdmin = true OR m.username = :username OR o.username = :username) " +
+            "AND (:month IS NULL OR i.month = :month) " +
+            "AND (:year IS NULL OR i.year = :year) " +
+            "AND (:status IS NULL OR i.paymentStatus = :status) " +
+            "AND (:buildingId IS NULL OR b.buildingId = :buildingId) " +
+            "AND (:roomNumber IS NULL OR r.roomNumber LIKE %:roomNumber%)")
     Page<Invoice> findAllCustom(@Param("username") String username,
                                 @Param("isAdmin") boolean isAdmin,
+                                @Param("month") Integer month,
+                                @Param("year") Integer year,
+                                @Param("status") String status,
+                                @Param("buildingId") Integer buildingId,
+                                @Param("roomNumber") String roomNumber,
                                 Pageable pageable);
 }
