@@ -36,7 +36,12 @@ public enum ErrorCode {
     ROOM_TYPE_IN_USE(1026, "Cannot delete room type that is currently assigned to rooms", HttpStatus.BAD_REQUEST),
     INCIDENT_NOT_FOUND(1027, "Incident not found", HttpStatus.NOT_FOUND),
     NOTIFICATION_NOT_FOUND(1028, "Notification not found", HttpStatus.NOT_FOUND),
-    INVOICE_NOT_FOUND(1029, "Invoice not found", HttpStatus.NOT_FOUND);
+    INVOICE_NOT_FOUND(1029, "Invoice not found", HttpStatus.NOT_FOUND),
+    FLOOR_NOT_FOUND(1030, "Floor not found", HttpStatus.NOT_FOUND),
+    FLOOR_IN_USE(1031, "Cannot delete floor that is currently assigned to rooms", HttpStatus.BAD_REQUEST),
+    DEDUCTION_REASON_REQUIRED(1032, "Lý do khấu trừ là bắt buộc khi có chi phí phát sinh", HttpStatus.BAD_REQUEST),
+    ROOM_OCCUPIED(1033, "Cannot delete room that is currently occupied", HttpStatus.BAD_REQUEST),
+    ROOM_IN_USE(1034, "Cannot delete room that has active or past contracts", HttpStatus.BAD_REQUEST);
     private final int code;
     private final String message;
     private final HttpStatus statusCode;

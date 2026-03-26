@@ -25,6 +25,10 @@ public class Building {
     @JoinColumn(name = "manager_user_id")
     private User manager;
 
+    @ManyToOne
+    @JoinColumn(name = "owner_user_id")
+    private User owner;
+
     @Column(name = "total_floors")
     private Integer totalFloors;
 }

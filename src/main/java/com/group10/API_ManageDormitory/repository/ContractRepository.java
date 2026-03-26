@@ -11,4 +11,5 @@ import java.util.Optional;
 public interface ContractRepository extends JpaRepository<Contract, Integer> {
     List<Contract> findAllByIsDeletedFalse();
     Optional<Contract> findByContractIdAndIsDeletedFalse(Integer id);
+    boolean existsByRoom_RoomIdAndIsDeletedFalse(Integer roomId);
 }

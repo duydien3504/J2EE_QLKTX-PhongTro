@@ -4,9 +4,8 @@ import com.group10.API_ManageDormitory.dtos.request.UserCreationRequest;
 import com.group10.API_ManageDormitory.dtos.response.UserResponse;
 import com.group10.API_ManageDormitory.entity.Role;
 import com.group10.API_ManageDormitory.entity.User;
-import com.group10.API_ManageDormitory.exception.AppException;
-import com.group10.API_ManageDormitory.exception.ErrorCode;
 import com.group10.API_ManageDormitory.mapper.UserMapper;
+import com.group10.API_ManageDormitory.repository.BuildingRepository;
 import com.group10.API_ManageDormitory.repository.RoleRepository;
 import com.group10.API_ManageDormitory.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -15,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import static org.mockito.ArgumentMatchers.eq;
 
 import java.util.Optional;
 
@@ -29,6 +29,8 @@ class UserServiceTest {
     private UserRepository userRepository;
     @Mock
     private RoleRepository roleRepository;
+    @Mock
+    private BuildingRepository buildingRepository;
     @Mock
     private UserMapper userMapper;
     @Mock
@@ -52,7 +54,8 @@ class UserServiceTest {
         when(passwordEncoder.encode("password")).thenReturn("encoded");
         when(roleRepository.findByRoleName("STAFF")).thenReturn(Optional.of(role));
         when(userRepository.save(any())).thenReturn(user);
-        when(userMapper.toUserResponse(user)).thenReturn(response);
+        when(buildingRepository.findByManager_UserId(any())).thenReturn(java.util.Collections.emptyList());
+        when(userMapper.toUserResponse(eq(user), any(), any())).thenReturn(response);
 
         var result = userService.createUser(request);
 

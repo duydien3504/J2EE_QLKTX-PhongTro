@@ -2,12 +2,8 @@ package com.group10.API_ManageDormitory.service;
 
 import com.google.gson.Gson;
 import com.group10.API_ManageDormitory.config.MoMoConfig;
-import com.group10.API_ManageDormitory.entity.Contract;
-import com.group10.API_ManageDormitory.entity.Invoice;
-import com.group10.API_ManageDormitory.entity.Payment;
-import com.group10.API_ManageDormitory.repository.ContractRepository;
-import com.group10.API_ManageDormitory.repository.InvoiceRepository;
-import com.group10.API_ManageDormitory.repository.PaymentRepository;
+import com.group10.API_ManageDormitory.entity.*;
+import com.group10.API_ManageDormitory.repository.*;
 import com.group10.API_ManageDormitory.utils.momo.MoMoEncoder;
 import com.group10.API_ManageDormitory.utils.momo.MoMoRequest;
 import com.group10.API_ManageDormitory.utils.momo.MoMoResponse;
@@ -27,8 +23,10 @@ public class MoMoService {
     private final InvoiceRepository invoiceRepository;
     private final PaymentRepository paymentRepository;
     private final ContractRepository contractRepository;
-    private final Gson gson = new Gson();
-    private final OkHttpClient httpClient = new OkHttpClient();
+    private final ContractTenantRepository contractTenantRepository;
+    private final NotificationService notificationService;
+    private Gson gson = new Gson();
+    private OkHttpClient httpClient = new OkHttpClient();
 
     public MoMoResponse createPayment(Integer invoiceId) throws IOException {
         Invoice invoice = invoiceRepository.findById(invoiceId)
@@ -203,6 +201,38 @@ public class MoMoService {
                                 .build();
                         paymentRepository.save(payment);
                         System.out.println("Payment record created successfully");
+
+                        // Notify Tenant and Manager
+                        if (invoice.getContract() != null && invoice.getContract().getRoom() != null) {
+                            String roomNum = invoice.getContract().getRoom().getRoomNumber();
+                            String amountStr = new java.text.DecimalFormat("#,###").format(invoice.getTotalAmount());
+                            
+                            // 1. Notify Tenants
+                            java.util.List<ContractTenant> members = 
+                                contractTenantRepository.findByContract_ContractIdAndContract_IsDeletedFalse(invoice.getContract().getContractId());
+                            
+                            members.forEach(m -> {
+                                if (m.getTenant() != null && m.getTenant().getUser() != null) {
+                                    notificationService.createNotification(com.group10.API_ManageDormitory.dtos.request.NotificationRequest.builder()
+                                            .title("Thanh toán thành công - Phòng " + roomNum)
+                                            .content("Hệ thống đã nhận được số tiền " + amountStr + " VNĐ cho hóa đơn tháng " + invoice.getMonth() + "/" + invoice.getYear() + ". Cảm ơn bạn!")
+                                            .type("PAYMENT")
+                                            .userIds(java.util.List.of(m.getTenant().getUser().getUserId()))
+                                            .build());
+                                }
+                            });
+
+                            // 2. Notify Building Manager
+                            User manager = invoice.getContract().getRoom().getFloor().getBuilding().getManager();
+                            if (manager != null) {
+                                notificationService.createNotification(com.group10.API_ManageDormitory.dtos.request.NotificationRequest.builder()
+                                        .title("Thông báo thanh toán - Phòng " + roomNum)
+                                        .content("Phòng " + roomNum + " vừa thanh toán hóa đơn tháng " + invoice.getMonth() + "/" + invoice.getYear() + " (Số tiền: " + amountStr + " VNĐ).")
+                                        .type("PAYMENT")
+                                        .userIds(java.util.List.of(manager.getUserId()))
+                                        .build());
+                            }
+                        }
                     } else {
                         System.out.println("Invoice #" + invoiceId + " was already marked as PAID");
                     }

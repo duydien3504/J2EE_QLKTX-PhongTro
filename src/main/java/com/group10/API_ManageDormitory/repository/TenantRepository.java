@@ -18,4 +18,6 @@ public interface TenantRepository extends JpaRepository<Tenant, Integer> {
     List<Tenant> searchTenants(@org.springframework.data.repository.query.Param("keyword") String keyword);
 
     java.util.Optional<Tenant> findByUser_UserId(Integer userId);
+
+    java.util.Optional<Tenant> findByUser_Username(String username);
 }

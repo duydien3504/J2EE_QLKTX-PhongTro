@@ -34,6 +34,14 @@ public class UserMapper {
     }
 
     public UserResponse toUserResponse(User user) {
+        return toUserResponse(user, null, java.util.Collections.emptyList());
+    }
+
+    public UserResponse toUserResponse(User user, Integer tenantId) {
+        return toUserResponse(user, tenantId, java.util.Collections.emptyList());
+    }
+
+    public UserResponse toUserResponse(User user, Integer tenantId, java.util.List<String> managedBuildings) {
         if (user == null) {
             return null;
         }
@@ -46,6 +54,8 @@ public class UserMapper {
                 .isActive(user.getIsActive())
                 .createdAt(user.getCreatedAt())
                 .roleName(user.getRole() != null ? user.getRole().getRoleName() : null)
+                .tenantId(tenantId)
+                .managedBuildings(managedBuildings)
                 .build();
     }
 }

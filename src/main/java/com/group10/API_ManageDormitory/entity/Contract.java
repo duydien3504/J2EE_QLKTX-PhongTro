@@ -58,6 +58,12 @@ public class Contract {
     @Column(name = "deduction_reason")
     private String deductionReason;
 
+    @Column(name = "final_electricity_reading", precision = 10, scale = 2)
+    private BigDecimal finalElectricityReading;
+
+    @Column(name = "final_water_reading", precision = 10, scale = 2)
+    private BigDecimal finalWaterReading;
+
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {

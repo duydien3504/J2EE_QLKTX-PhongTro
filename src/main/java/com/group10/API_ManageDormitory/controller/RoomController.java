@@ -75,7 +75,7 @@ public class RoomController {
     }
 
     @PostMapping("/rooms")
-    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<RoomResponse> createRoom(@RequestBody @Valid RoomRequest request) {
         return ApiResponse.<RoomResponse>builder()
                 .result(roomService.createRoom(request))
@@ -83,7 +83,7 @@ public class RoomController {
     }
 
     @PutMapping("/rooms/{id}")
-    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<RoomResponse> updateRoom(@PathVariable Integer id, @RequestBody RoomRequest request) {
         return ApiResponse.<RoomResponse>builder()
                 .result(roomService.updateRoom(id, request))
@@ -112,6 +112,13 @@ public class RoomController {
         return ApiResponse.<RoomResponse>builder()
                 .result(roomService.uploadRoomImages(id, images))
                 .build();
+    }
+
+    @DeleteMapping("/rooms/{id}")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
+    public ApiResponse<Void> deleteRoom(@PathVariable Integer id) {
+        roomService.deleteRoom(id);
+        return ApiResponse.<Void>builder().build();
     }
 }
 

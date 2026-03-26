@@ -2,14 +2,13 @@ package com.group10.API_ManageDormitory.controller;
 
 import com.group10.API_ManageDormitory.dtos.response.ApiResponse;
 import com.group10.API_ManageDormitory.dtos.response.InvoiceResponse;
+import com.group10.API_ManageDormitory.dtos.response.PageResponse;
 import com.group10.API_ManageDormitory.entity.Invoice;
 import com.group10.API_ManageDormitory.service.InvoiceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/invoices")
@@ -20,9 +19,12 @@ public class InvoiceController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
-    public ApiResponse<List<InvoiceResponse>> getAllInvoices(){
-        return ApiResponse.<List<InvoiceResponse>>builder()
-                .result(invoiceService.getAllInvoices())
+    public ApiResponse<PageResponse<InvoiceResponse>> getAllInvoices(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ){
+        return ApiResponse.<PageResponse<InvoiceResponse>>builder()
+                .result(invoiceService.getAllInvoices(page, size))
                 .build();
     }
 
@@ -35,7 +37,7 @@ public class InvoiceController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<InvoiceResponse> createInvoice(@Valid @RequestBody Invoice invoice){
         return ApiResponse.<InvoiceResponse>builder()
                 .result(invoiceService.createInvoice(invoice))
@@ -43,7 +45,7 @@ public class InvoiceController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public ApiResponse<InvoiceResponse> updateInvoice(@PathVariable Integer id,
                                  @Valid @RequestBody Invoice invoice){
         return ApiResponse.<InvoiceResponse>builder()
@@ -52,7 +54,7 @@ public class InvoiceController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER')")
+    @PreAuthorize("hasAuthority('SCOPE_ADMIN') or hasAuthority('SCOPE_OWNER') or hasAuthority('SCOPE_STAFF')")
     public void deleteInvoice(@PathVariable Integer id){
         invoiceService.deleteInvoice(id);
     }
